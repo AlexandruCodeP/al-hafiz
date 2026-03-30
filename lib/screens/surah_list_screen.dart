@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../models/surah.dart';
+import '../services/audio_service.dart';
 import '../services/quran_service.dart';
 import '../services/storage_service.dart';
 import '../theme/app_theme.dart';
@@ -62,7 +63,12 @@ class _SurahListScreenState extends State<SurahListScreen>
   @override
   Widget build(BuildContext context) {
     final storage = context.watch<StorageService>();
+    final audio = context.watch<AudioService>();
     final (lastSurahId, lastAyahId) = storage.getLastPosition();
+
+    // Prioritize currently playing surah, fallback to last position
+    final playerSurahId = audio.currentSurahId ?? lastSurahId;
+    final playerAyahId = audio.currentAyahId ?? lastAyahId ?? 1;
 
     return Scaffold(
       body: CustomScrollView(
@@ -144,28 +150,39 @@ class _SurahListScreenState extends State<SurahListScreen>
               ),
             ),
           ),
-          
-          if (!_isLoading && lastSurahId != null)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: _ContinueReadingCard(
-                  surahId: lastSurahId,
-                  ayahId: lastAyahId ?? 1,
-                  onTap: () async {
-                    final surah = await QuranService.instance.getSurah(lastSurahId);
-                    if (mounted) {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => ReaderScreen(
-                            surah: surah,
-                            initialAyahId: lastAyahId,
+
+          if (!_isLoading && playerSurahId != null)
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _PlayerHeaderDelegate(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                  child: _ContinueReadingCard(
+                    surahId: playerSurahId,
+                    ayahId: playerAyahId,
+                    isPlaying: audio.isPlaying && audio.currentSurahId == playerSurahId,
+                    onTap: () async {
+                      final surah = await QuranService.instance.getSurah(playerSurahId);
+                      if (mounted) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ReaderScreen(
+                              surah: surah,
+                              initialAyahId: playerAyahId,
+                            ),
                           ),
-                        ),
-                      );
-                    }
-                  },
+                        );
+                      }
+                    },
+                    onPlayPause: () {
+                      if (audio.currentSurahId != null) {
+                        audio.togglePlayPause();
+                      } else {
+                        audio.playAyah(playerSurahId, playerAyahId);
+                      }
+                    },
+                  ),
                 ),
               ),
             ),
@@ -230,15 +247,42 @@ class _SurahListScreenState extends State<SurahListScreen>
   }
 }
 
+class _PlayerHeaderDelegate extends SliverPersistentHeaderDelegate {
+  final Widget child;
+
+  _PlayerHeaderDelegate({required this.child});
+
+  @override
+  double get maxExtent => 108;
+
+  @override
+  double get minExtent => 108;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(
+      color: Theme.of(context).scaffoldBackgroundColor,
+      child: child,
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant _PlayerHeaderDelegate oldDelegate) => true;
+}
+
 class _ContinueReadingCard extends StatelessWidget {
   final int surahId;
   final int ayahId;
+  final bool isPlaying;
   final VoidCallback onTap;
+  final VoidCallback onPlayPause;
 
   const _ContinueReadingCard({
     required this.surahId,
     required this.ayahId,
+    required this.isPlaying,
     required this.onTap,
+    required this.onPlayPause,
   });
 
   @override
@@ -268,10 +312,15 @@ class _ContinueReadingCard extends StatelessWidget {
             padding: const EdgeInsets.all(20),
             child: Row(
               children: [
-                const Icon(
-                  Icons.play_circle_fill_rounded,
-                  color: Colors.white,
-                  size: 48,
+                GestureDetector(
+                  onTap: onPlayPause,
+                  child: Icon(
+                    isPlaying
+                        ? Icons.pause_circle_filled_rounded
+                        : Icons.play_circle_fill_rounded,
+                    color: Colors.white,
+                    size: 48,
+                  ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -279,7 +328,7 @@ class _ContinueReadingCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Continuer la lecture',
+                        isPlaying ? 'En cours de lecture' : 'Continuer la lecture',
                         style: GoogleFonts.poppins(
                           color: Colors.white.withValues(alpha: 0.8),
                           fontSize: 13,
@@ -466,17 +515,21 @@ class _SurahTile extends StatelessWidget {
                                   fontWeight: FontWeight.w600,
                                   color: AppColors.textPrimary,
                                 ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                               const SizedBox(height: 2),
                               Row(
                                 children: [
                                   _TypeBadge(isMeccan: surah.isMeccan),
                                   const SizedBox(width: 8),
-                                  Text(
-                                    '${surah.totalVerses} verses',
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 12,
-                                      color: AppColors.textSecondary,
+                                  Flexible(
+                                    child: Text(
+                                      '${surah.totalVerses} verses',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 12,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
                                 ],
@@ -484,6 +537,7 @@ class _SurahTile extends StatelessWidget {
                             ],
                           ),
                         ),
+                        const SizedBox(width: 8),
                         Text(
                           surah.name,
                           style: const TextStyle(

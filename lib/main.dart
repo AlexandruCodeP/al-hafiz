@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'models/reciter.dart';
 import 'services/audio_service.dart';
 import 'services/hifz_engine.dart';
 import 'services/storage_service.dart';
@@ -15,19 +16,22 @@ void main() async {
   final prefs = await SharedPreferences.getInstance();
   final storageService = StorageService(prefs);
 
-  runApp(AlHafizApp(storageService: storageService));
+  final savedReciter = Reciter.getById(storageService.reciterId);
+
+  runApp(AlHafizApp(storageService: storageService, initialReciter: savedReciter));
 }
 
 class AlHafizApp extends StatelessWidget {
   final StorageService storageService;
+  final Reciter initialReciter;
 
-  const AlHafizApp({super.key, required this.storageService});
+  const AlHafizApp({super.key, required this.storageService, required this.initialReciter});
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AudioService()),
+        ChangeNotifierProvider(create: (_) => AudioService()..setReciter(initialReciter)),
         ChangeNotifierProxyProvider<AudioService, HifzEngine>(
           create: (ctx) => HifzEngine(ctx.read<AudioService>()),
           update: (_, audio, prev) => prev ?? HifzEngine(audio),

@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh auth:*)",
+      "Bash(gh repo:*)",
+      "Bash(flutter devices:*)",
+      "Bash(flutter run:*)",
+      "Bash(flutter create:*)",
+      "WebFetch(domain:api.quran.com)",
+      "Bash(curl -s \"http://127.0.0.1:53916/d3tyvK-qde8=/api/v1/hotRestart\" -X POST)",
+      "WebFetch(domain:www.everyayah.com)",
+      "WebFetch(domain:everyayah.com)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(flutter analyze:*)",
+      "Bash(flutter build:*)",
+      "WebFetch(domain:server8.mp3quran.net)",
+      "WebFetch(domain:mp3quran.net)",
+      "WebSearch",
+      "WebFetch(domain:server10.mp3quran.net)"
+    ]
+  }
+}

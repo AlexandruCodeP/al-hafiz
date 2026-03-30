@@ -1,8 +1,10 @@
 import 'package:just_audio/just_audio.dart';
 import 'package:flutter/foundation.dart';
+import '../models/reciter.dart';
 
 class AudioService extends ChangeNotifier {
   final AudioPlayer _player = AudioPlayer();
+  Reciter _currentReciter = Reciter.all.first;
 
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
@@ -59,20 +61,40 @@ class AudioService extends ChangeNotifier {
   Duration? get clipEnd => _clipEnd;
   AudioPlayer get player => _player;
   bool get continuousReading => _continuousReading;
+  Reciter get currentReciter => _currentReciter;
 
   set continuousReading(bool value) {
     _continuousReading = value;
     notifyListeners();
   }
 
+  void setReciter(Reciter reciter) {
+    _currentReciter = reciter;
+    notifyListeners();
+  }
+
   String _buildAudioUrl(int surahId, int ayahId) {
     final surah = surahId.toString().padLeft(3, '0');
+    if (_currentReciter.source == ReciterSource.mp3quran) {
+      final base = _currentReciter.baseUrl ?? 'https://server10.mp3quran.net';
+      return '$base/${_currentReciter.folder}/$surah.mp3';
+    }
     final ayah = ayahId.toString().padLeft(3, '0');
-    return 'https://www.everyayah.com/data/Alafasy_128kbps/$surah$ayah.mp3';
+    return 'https://www.everyayah.com/data/${_currentReciter.folder}/$surah$ayah.mp3';
   }
+
+  /// Whether the current reciter provides audio per-surah (not per-ayah)
+  bool get isPerSurahSource => _currentReciter.source == ReciterSource.mp3quran;
 
   Future<void> playAyah(int surahId, int ayahId) async {
     try {
+      // For per-surah sources, don't reload if same surah is already loaded
+      if (isPerSurahSource && _currentSurahId == surahId && _isPlaying) {
+        _currentAyahId = ayahId;
+        notifyListeners();
+        return;
+      }
+
       _isLoading = true;
       _currentSurahId = surahId;
       _currentAyahId = ayahId;

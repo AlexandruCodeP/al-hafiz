@@ -11,6 +11,8 @@ import '../widgets/audio_player_bar.dart';
 import '../widgets/hifz_controls.dart';
 import '../widgets/note_dialog.dart';
 import '../widgets/focus_mode.dart';
+import '../models/reciter.dart';
+import '../services/quran_service.dart';
 
 class ReaderScreen extends StatefulWidget {
   final Surah surah;
@@ -30,17 +32,20 @@ class _ReaderScreenState extends State<ReaderScreen>
   bool _userIsScrolling = false;
   final ScrollController _scrollController = ScrollController();
   late AnimationController _entryAnim;
+  AudioService? _audioService;
+  late Surah _surah;
+  bool _isLoadingExtra = true;
 
   @override
   void initState() {
     super.initState();
+    _surah = widget.surah;
     _entryAnim = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 600),
     )..forward();
 
     _scrollController.addListener(() {
-      // Detect manual scrolling to avoid fighting with auto-scroll
       if (_scrollController.position.isScrollingNotifier.value) {
         _userIsScrolling = true;
         Future.delayed(const Duration(seconds: 2), () {
@@ -49,30 +54,41 @@ class _ReaderScreenState extends State<ReaderScreen>
       }
     });
 
+    _loadEnrichedSurah();
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final audio = context.read<AudioService>();
+      _audioService = context.read<AudioService>();
       final hifz = context.read<HifzEngine>();
 
       hifz.setSurahId(widget.surah.id);
       hifz.setRange(1, widget.surah.totalVerses);
 
-      // Connect audio service to the auto-next logic
-      audio.onVerseComplete = () {
-        if (audio.currentAyahId != null && audio.currentAyahId! < widget.surah.totalVerses) {
-          audio.playAyah(widget.surah.id, audio.currentAyahId! + 1);
+      _audioService!.onVerseComplete = () {
+        if (_audioService!.currentAyahId != null && _audioService!.currentAyahId! < widget.surah.totalVerses) {
+          _audioService!.playAyah(widget.surah.id, _audioService!.currentAyahId! + 1);
         }
       };
 
       if (widget.initialAyahId != null) {
         _scrollToAyah(widget.initialAyahId! - 1);
-        audio.playAyah(widget.surah.id, widget.initialAyahId!);
+        _audioService!.playAyah(widget.surah.id, widget.initialAyahId!);
       }
     });
   }
 
+  Future<void> _loadEnrichedSurah() async {
+    final enriched = await QuranService.instance.getSurah(widget.surah.id);
+    if (mounted) {
+      setState(() {
+        _surah = enriched;
+        _isLoadingExtra = false;
+      });
+    }
+  }
+
   @override
   void dispose() {
-    context.read<AudioService>().onVerseComplete = null;
+    _audioService?.onVerseComplete = null;
     _scrollController.dispose();
     _entryAnim.dispose();
     super.dispose();
@@ -90,6 +106,10 @@ class _ReaderScreenState extends State<ReaderScreen>
 
   @override
   Widget build(BuildContext context) {
+    final audio = context.watch<AudioService>();
+    final bool showMiniPlayer = audio.currentSurahId != null &&
+        audio.currentSurahId != widget.surah.id;
+
     return Scaffold(
       appBar: AppBar(
         title: Column(
@@ -117,6 +137,28 @@ class _ReaderScreenState extends State<ReaderScreen>
       ),
       body: Column(
         children: [
+          // Mini player bar when viewing a different surah than the one playing
+          if (showMiniPlayer)
+            _MiniPlayerBar(
+              surahId: audio.currentSurahId!,
+              ayahId: audio.currentAyahId,
+              isPlaying: audio.isPlaying,
+              onTap: () async {
+                final surah = await QuranService.instance.getSurah(audio.currentSurahId!);
+                if (mounted) {
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ReaderScreen(
+                        surah: surah,
+                        initialAyahId: audio.currentAyahId,
+                      ),
+                    ),
+                  );
+                }
+              },
+              onPlayPause: audio.togglePlayPause,
+            ),
           AnimatedSize(
             duration: const Duration(milliseconds: 300),
             child: _showHifzControls
@@ -134,9 +176,9 @@ class _ReaderScreenState extends State<ReaderScreen>
                 return ListView.builder(
                   controller: _scrollController,
                   padding: const EdgeInsets.only(top: 8, bottom: 80),
-                  itemCount: widget.surah.verses.length,
+                  itemCount: _surah.verses.length,
                   itemBuilder: (context, index) {
-                    final ayah = widget.surah.verses[index];
+                    final ayah = _surah.verses[index];
                     final isPlaying = audio.currentSurahId == widget.surah.id && audio.currentAyahId == ayah.id;
 
                     if (isPlaying && !_userIsScrolling) {
@@ -172,7 +214,7 @@ class _ReaderScreenState extends State<ReaderScreen>
           ),
           AudioPlayerBar(
             surahName: widget.surah.transliteration,
-            ayahNumber: context.watch<AudioService>().currentAyahId,
+            ayahNumber: audio.currentAyahId,
             totalVerses: widget.surah.totalVerses,
             onExpandHifz: () => setState(() => _showHifzControls = !_showHifzControls),
           ),
@@ -185,56 +227,151 @@ class _ReaderScreenState extends State<ReaderScreen>
     showModalBottomSheet(
       context: context,
       backgroundColor: Theme.of(context).cardColor,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (context) {
-        return Consumer<StorageService>(
-          builder: (context, storage, _) => Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Réglages d\'affichage', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 20),
-                const Text('Taille du texte'),
-                Slider(
-                  value: storage.textSizeMultiplier,
-                  min: 0.8, max: 1.8,
-                  onChanged: (v) => storage.setTextSizeMultiplier(v),
-                ),
-                SwitchListTile(
-                  title: const Text('Arabe'),
-                  value: storage.showArabic,
-                  onChanged: (v) => storage.setShowArabic(v),
-                ),
-                SwitchListTile(
-                  title: const Text('Phonétique'),
-                  value: storage.showPhonetic,
-                  onChanged: (v) => storage.setShowPhonetic(v),
-                ),
-                SwitchListTile(
-                  title: const Text('Traduction'),
-                  value: storage.showTranslation,
-                  onChanged: (v) => storage.setShowTranslation(v),
-                ),
-                const Divider(),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        return Consumer2<StorageService, AudioService>(
+          builder: (context, storage, audio, _) => DraggableScrollableSheet(
+            initialChildSize: 0.6,
+            minChildSize: 0.4,
+            maxChildSize: 0.85,
+            expand: false,
+            builder: (context, scrollController) => SingleChildScrollView(
+              controller: scrollController,
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Mode Sombre'),
-                    SegmentedButton<ThemeMode>(
-                      segments: const [
-                        ButtonSegment(value: ThemeMode.light, icon: Icon(Icons.light_mode)),
-                        ButtonSegment(value: ThemeMode.dark, icon: Icon(Icons.dark_mode)),
+                    const Text('Réglages d\'affichage', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 20),
+                    const Text('Taille du texte'),
+                    Slider(
+                      value: storage.textSizeMultiplier,
+                      min: 0.8, max: 1.8,
+                      onChanged: (v) => storage.setTextSizeMultiplier(v),
+                    ),
+                    SwitchListTile(
+                      title: const Text('Arabe'),
+                      value: storage.showArabic,
+                      onChanged: (v) => storage.setShowArabic(v),
+                    ),
+                    SwitchListTile(
+                      title: const Text('Phonétique'),
+                      value: storage.showPhonetic,
+                      onChanged: (v) => storage.setShowPhonetic(v),
+                    ),
+                    SwitchListTile(
+                      title: const Text('Traduction'),
+                      value: storage.showTranslation,
+                      onChanged: (v) => storage.setShowTranslation(v),
+                    ),
+                    const Divider(),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Mode Sombre'),
+                        SegmentedButton<ThemeMode>(
+                          segments: const [
+                            ButtonSegment(value: ThemeMode.light, icon: Icon(Icons.light_mode)),
+                            ButtonSegment(value: ThemeMode.dark, icon: Icon(Icons.dark_mode)),
+                          ],
+                          selected: {storage.themeMode},
+                          onSelectionChanged: (v) => storage.setThemeMode(v.first),
+                        ),
                       ],
-                      selected: {storage.themeMode},
-                      onSelectionChanged: (v) => storage.setThemeMode(v.first),
+                    ),
+                    const Divider(),
+                    const SizedBox(height: 8),
+                    const Text('Récitateur', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 8),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.record_voice_over_rounded),
+                      title: Text(audio.currentReciter.displayName),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _showReciterPicker(context);
+                      },
                     ),
                   ],
                 ),
-              ],
+              ),
             ),
           ),
+        );
+      },
+    );
+  }
+
+  void _showReciterPicker(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).cardColor,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.7,
+          minChildSize: 0.4,
+          maxChildSize: 0.9,
+          expand: false,
+          builder: (context, scrollController) {
+            final audio = context.watch<AudioService>();
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.record_voice_over_rounded, size: 22),
+                      const SizedBox(width: 10),
+                      const Text(
+                        'Choisir un récitateur',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '${Reciter.all.length} récitateurs',
+                        style: TextStyle(fontSize: 13, color: Theme.of(context).hintColor),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: ListView.builder(
+                    controller: scrollController,
+                    itemCount: Reciter.all.length,
+                    itemBuilder: (context, index) {
+                      final reciter = Reciter.all[index];
+                      final isSelected = audio.currentReciter.id == reciter.id;
+                      return ListTile(
+                        leading: Icon(
+                          isSelected ? Icons.check_circle_rounded : Icons.circle_outlined,
+                          color: isSelected ? Theme.of(context).colorScheme.primary : null,
+                          size: 22,
+                        ),
+                        title: Text(
+                          reciter.displayName,
+                          style: TextStyle(
+                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                          ),
+                        ),
+                        onTap: () {
+                          audio.setReciter(reciter);
+                          context.read<StorageService>().setReciterId(reciter.id);
+                          Navigator.pop(ctx);
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -279,6 +416,76 @@ class _ReaderScreenState extends State<ReaderScreen>
                   storage.saveNote(widget.surah.id, ayah.id, result);
                 }
               },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MiniPlayerBar extends StatelessWidget {
+  final int surahId;
+  final int? ayahId;
+  final bool isPlaying;
+  final VoidCallback onTap;
+  final VoidCallback onPlayPause;
+
+  const _MiniPlayerBar({
+    required this.surahId,
+    required this.ayahId,
+    required this.isPlaying,
+    required this.onTap,
+    required this.onPlayPause,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [AppColors.primary, AppColors.primaryLight],
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+          ),
+        ),
+        child: Row(
+          children: [
+            GestureDetector(
+              onTap: onPlayPause,
+              child: Icon(
+                isPlaying
+                    ? Icons.pause_circle_filled_rounded
+                    : Icons.play_circle_filled_rounded,
+                color: Colors.white,
+                size: 30,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FutureBuilder<Surah>(
+                future: QuranService.instance.getSurah(surahId),
+                builder: (context, snapshot) {
+                  final name = snapshot.data?.transliteration ?? '...';
+                  return Text(
+                    'En cours : $name${ayahId != null ? ', Verset $ayahId' : ''}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  );
+                },
+              ),
+            ),
+            const Icon(
+              Icons.arrow_forward_ios_rounded,
+              color: Colors.white70,
+              size: 14,
             ),
           ],
         ),

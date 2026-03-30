@@ -69,7 +69,7 @@ class QuranService {
           'https://api.quran.com/api/v4/quran/translations/136?chapter_number=$surahId'));
       
       final phoneticResponse = await http.get(Uri.parse(
-          'https://api.quran.com/api/v4/quran/transliteration?chapter_number=$surahId'));
+          'https://api.quran.com/api/v4/quran/translations/57?chapter_number=$surahId'));
 
       if (transResponse.statusCode == 200) {
         final data = json.decode(transResponse.body);
@@ -80,8 +80,8 @@ class QuranService {
 
       if (phoneticResponse.statusCode == 200) {
         final data = json.decode(phoneticResponse.body);
-        _phoneticCache[surahId] = (data['transliterations'] as List)
-            .map((e) => e['text'] as String)
+        _phoneticCache[surahId] = (data['translations'] as List)
+            .map((e) => _cleanHtml(e['text'] as String))
             .toList();
       }
     } catch (e) {

@@ -40,6 +40,7 @@ class StorageService extends ChangeNotifier {
   static const _showTranslationKey = 'show_translation';
   static const _showPhoneticKey = 'show_phonetic';
   static const _bookmarksKey = 'bookmarks';
+  static const _reciterKey = 'reciter_id';
 
   final SharedPreferences _prefs;
 
@@ -220,5 +221,12 @@ class StorageService extends ChangeNotifier {
 
   bool isBookmarked(int surahId, int ayahId) {
     return getBookmarks().contains('$surahId:$ayahId');
+  }
+
+  // --- Reciter ---
+  String get reciterId => _prefs.getString(_reciterKey) ?? 'alafasy';
+  Future<void> setReciterId(String id) async {
+    await _prefs.setString(_reciterKey, id);
+    notifyListeners();
   }
 }
