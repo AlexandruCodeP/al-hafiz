@@ -163,14 +163,6 @@ class _ReaderScreenState extends State<ReaderScreen>
             icon: const Icon(Icons.settings_outlined, size: 20),
             onPressed: () => _showSettingsSheet(context),
           ),
-          IconButton(
-            icon: Icon(_hideText ? Icons.visibility_off_rounded : Icons.visibility_rounded, size: 20),
-            onPressed: () => setState(() => _hideText = !_hideText),
-          ),
-          FocusModeToggle(
-            isActive: _focusModeActive,
-            onToggle: () => setState(() => _focusModeActive = !_focusModeActive),
-          ),
         ],
       ),
       body: PaperGrainOverlay(
