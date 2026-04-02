@@ -47,8 +47,6 @@ class _ReaderScreenState extends State<ReaderScreen>
       duration: const Duration(milliseconds: 600),
     )..forward();
 
-    _scrollController.addListener(_onUserScroll);
-
     _loadEnrichedSurah();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -89,15 +87,15 @@ class _ReaderScreenState extends State<ReaderScreen>
     super.dispose();
   }
 
-  bool _isAutoScrolling = false;
-
-  void _onUserScroll() {
-    // Ignore scroll events caused by our own animateTo
-    if (_isAutoScrolling) return;
-
-    if (_scrollController.position.isScrollingNotifier.value && _autoScrollEnabled) {
-      setState(() => _autoScrollEnabled = false);
+  /// Detect user-initiated scroll (finger drag) vs programmatic scroll
+  bool _onScrollNotification(ScrollNotification notification) {
+    if (notification is ScrollStartNotification) {
+      // DragScrollActivity has non-null dragDetails -> user is dragging
+      if (notification.dragDetails != null && _autoScrollEnabled) {
+        setState(() => _autoScrollEnabled = false);
+      }
     }
+    return false; // don't absorb the notification
   }
 
   void _scrollToAyah(int ayahIndex) {
@@ -110,26 +108,23 @@ class _ReaderScreenState extends State<ReaderScreen>
     final renderObj = key.currentContext?.findRenderObject();
     if (renderObj == null || renderObj is! RenderBox) return;
 
-    final scrollBox = _scrollController.position.context.storageContext
-        .findRenderObject() as RenderBox?;
-    if (scrollBox == null) return;
-
-    // Get card position and size
-    final cardOffset = renderObj.localToGlobal(Offset.zero, ancestor: scrollBox);
+    // Get card position relative to screen
+    final cardScreenOffset = renderObj.localToGlobal(Offset.zero);
     final cardHeight = renderObj.size.height;
     final viewportHeight = _scrollController.position.viewportDimension;
 
-    // Center the card vertically in the viewport
-    final target = _scrollController.offset + cardOffset.dy - (viewportHeight - cardHeight) / 2;
+    // Calculate how far off-center the card currently is
+    final cardCenter = cardScreenOffset.dy + cardHeight / 2;
+    final viewportCenter = viewportHeight / 2;
+    final delta = cardCenter - viewportCenter;
 
-    _isAutoScrolling = true;
+    final target = _scrollController.offset + delta;
+
     _scrollController.animateTo(
       target.clamp(0, _scrollController.position.maxScrollExtent),
       duration: const Duration(milliseconds: 400),
       curve: Curves.easeInOut,
-    ).then((_) {
-      _isAutoScrolling = false;
-    });
+    );
   }
 
   void _jumpToCurrentVerse() {
@@ -138,7 +133,9 @@ class _ReaderScreenState extends State<ReaderScreen>
     if (audio.currentSurahId != widget.surah.id) return;
 
     setState(() => _autoScrollEnabled = true);
-    _scrollToAyah(audio.currentAyahId! - 1);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToAyah(audio.currentAyahId! - 1);
+    });
   }
 
   @override
@@ -213,7 +210,9 @@ class _ReaderScreenState extends State<ReaderScreen>
           Expanded(
             child: Consumer2<AudioService, StorageService>(
               builder: (context, audio, storage, _) {
-                return ListView.builder(
+                return NotificationListener<ScrollNotification>(
+                  onNotification: _onScrollNotification,
+                  child: ListView.builder(
                   controller: _scrollController,
                   padding: const EdgeInsets.only(top: 8, bottom: 80),
                   itemCount: _surah.verses.length,
@@ -250,6 +249,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                       ),
                     );
                   },
+                ),
                 );
               },
             ),
