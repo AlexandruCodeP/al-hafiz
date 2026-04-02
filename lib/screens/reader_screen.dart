@@ -37,6 +37,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   late Surah _surah;
   bool _isLoadingExtra = true;
   final Map<int, GlobalKey> _ayahKeys = {};
+  int? _lastScrolledToAyah;
 
   @override
   void initState() {
@@ -132,9 +133,12 @@ class _ReaderScreenState extends State<ReaderScreen>
     if (audio == null || audio.currentAyahId == null) return;
     if (audio.currentSurahId != widget.surah.id) return;
 
-    setState(() => _autoScrollEnabled = true);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollToAyah(audio.currentAyahId! - 1);
+    setState(() {
+      _autoScrollEnabled = true;
+      _lastScrolledToAyah = null; // force re-scroll
+    });
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (mounted) _scrollToAyah(audio.currentAyahId! - 1);
     });
   }
 
@@ -221,8 +225,14 @@ class _ReaderScreenState extends State<ReaderScreen>
                     final isPlaying = audio.currentSurahId == widget.surah.id && audio.currentAyahId == ayah.id;
                     _ayahKeys.putIfAbsent(ayah.id, () => GlobalKey());
 
-                    if (isPlaying && _autoScrollEnabled) {
-                      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToAyah(index));
+                    if (isPlaying && _autoScrollEnabled && _lastScrolledToAyah != ayah.id) {
+                      _lastScrolledToAyah = ayah.id;
+                      // Delay slightly to let the new card fully lay out
+                      Future.delayed(const Duration(milliseconds: 150), () {
+                        if (mounted && _autoScrollEnabled) {
+                          _scrollToAyah(index);
+                        }
+                      });
                     }
 
                     return FocusModeAyahWrapper(
