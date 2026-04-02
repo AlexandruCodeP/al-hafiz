@@ -9,6 +9,7 @@ class AudioPlayerBar extends StatelessWidget {
   final String? surahName;
   final int? ayahNumber;
   final int totalVerses;
+  final int? displayedSurahId;
   final VoidCallback? onExpandHifz;
 
   const AudioPlayerBar({
@@ -16,6 +17,7 @@ class AudioPlayerBar extends StatelessWidget {
     this.surahName,
     this.ayahNumber,
     required this.totalVerses,
+    this.displayedSurahId,
     this.onExpandHifz,
   });
 
@@ -167,7 +169,17 @@ class AudioPlayerBar extends StatelessWidget {
                       _PlayPauseButton(
                         isPlaying: audio.isPlaying,
                         isLoading: audio.isLoading,
-                        onPressed: audio.togglePlayPause,
+                        onPressed: () {
+                          // If the displayed surah differs from the playing one,
+                          // start playing the displayed surah from verse 1
+                          if (displayedSurahId != null &&
+                              audio.currentSurahId != displayedSurahId &&
+                              !audio.isPlaying) {
+                            audio.playAyah(displayedSurahId!, 1);
+                          } else {
+                            audio.togglePlayPause();
+                          }
+                        },
                       ),
                       const SizedBox(width: 12),
                       // Next

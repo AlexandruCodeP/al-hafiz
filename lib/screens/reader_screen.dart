@@ -11,6 +11,7 @@ import '../widgets/audio_player_bar.dart';
 import '../widgets/hifz_controls.dart';
 import '../widgets/note_dialog.dart';
 import '../widgets/focus_mode.dart';
+import '../widgets/paper_grain.dart';
 import '../models/reciter.dart';
 import '../services/quran_service.dart';
 
@@ -35,6 +36,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   AudioService? _audioService;
   late Surah _surah;
   bool _isLoadingExtra = true;
+  final Map<int, GlobalKey> _ayahKeys = {};
 
   @override
   void initState() {
@@ -96,9 +98,23 @@ class _ReaderScreenState extends State<ReaderScreen>
 
   void _scrollToAyah(int ayahIndex) {
     if (!_scrollController.hasClients || _userIsScrolling) return;
-    final offset = ayahIndex * 160.0;
+
+    final ayahId = ayahIndex + 1;
+    final key = _ayahKeys[ayahId];
+    if (key == null) return;
+
+    final renderObj = key.currentContext?.findRenderObject();
+    if (renderObj == null || renderObj is! RenderBox) return;
+
+    final scrollBox = _scrollController.position.context.storageContext
+        .findRenderObject() as RenderBox?;
+    if (scrollBox == null) return;
+
+    final cardOffset = renderObj.localToGlobal(Offset.zero, ancestor: scrollBox);
+    final target = _scrollController.offset + cardOffset.dy - 80; // 80px top padding
+
     _scrollController.animateTo(
-      offset.clamp(0, _scrollController.position.maxScrollExtent),
+      target.clamp(0, _scrollController.position.maxScrollExtent),
       duration: const Duration(milliseconds: 400),
       curve: Curves.easeInOut,
     );
@@ -135,7 +151,8 @@ class _ReaderScreenState extends State<ReaderScreen>
           ),
         ],
       ),
-      body: Column(
+      body: PaperGrainOverlay(
+        child: Column(
         children: [
           // Mini player bar when viewing a different surah than the one playing
           if (showMiniPlayer)
@@ -180,12 +197,14 @@ class _ReaderScreenState extends State<ReaderScreen>
                   itemBuilder: (context, index) {
                     final ayah = _surah.verses[index];
                     final isPlaying = audio.currentSurahId == widget.surah.id && audio.currentAyahId == ayah.id;
+                    _ayahKeys.putIfAbsent(ayah.id, () => GlobalKey());
 
                     if (isPlaying && !_userIsScrolling) {
                       WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToAyah(index));
                     }
 
                     return FocusModeAyahWrapper(
+                      key: _ayahKeys[ayah.id],
                       focusModeActive: _focusModeActive,
                       isPlayingAyah: isPlaying,
                       child: AyahCard(
@@ -216,9 +235,11 @@ class _ReaderScreenState extends State<ReaderScreen>
             surahName: widget.surah.transliteration,
             ayahNumber: audio.currentAyahId,
             totalVerses: widget.surah.totalVerses,
+            displayedSurahId: widget.surah.id,
             onExpandHifz: () => setState(() => _showHifzControls = !_showHifzControls),
           ),
         ],
+      ),
       ),
     );
   }

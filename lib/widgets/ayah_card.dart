@@ -162,7 +162,9 @@ class AyahCard extends StatelessWidget {
                     textAlign: TextAlign.right,
                     textDirection: TextDirection.rtl,
                     style: AppTheme.arabicTextStyle(textSizeMultiplier).copyWith(
-                      color: isPlaying ? AppColors.accentLight : (isDark ? AppColors.textArabic : Colors.black87),
+                      color: isPlaying
+                          ? (isDark ? AppColors.accentLight : Colors.black87)
+                          : (isDark ? AppColors.textArabic : Colors.black87),
                     ),
                   ),
                 ],

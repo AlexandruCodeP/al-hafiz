@@ -41,6 +41,7 @@ class StorageService extends ChangeNotifier {
   static const _showPhoneticKey = 'show_phonetic';
   static const _bookmarksKey = 'bookmarks';
   static const _reciterKey = 'reciter_id';
+  static const _recentSurahsKey = 'recent_surahs';
 
   final SharedPreferences _prefs;
 
@@ -150,10 +151,37 @@ class StorageService extends ChangeNotifier {
     return getNotes()['$surahId:$ayahId'];
   }
 
+  // --- Stats helpers ---
+  int get totalMasteredAyahs => getMasteredAyahs().length;
+
+  int get surahsStarted {
+    final mastered = getMasteredAyahs();
+    final surahIds = <int>{};
+    for (final key in mastered) {
+      surahIds.add(int.parse(key.split(':')[0]));
+    }
+    return surahIds.length;
+  }
+
+  // --- Recent Surahs ---
+  List<int> getRecentSurahs() {
+    return _prefs.getStringList(_recentSurahsKey)?.map(int.parse).toList() ?? [];
+  }
+
+  Future<void> addRecentSurah(int surahId) async {
+    final recent = getRecentSurahs();
+    recent.remove(surahId);
+    recent.insert(0, surahId);
+    final trimmed = recent.take(5).toList();
+    await _prefs.setStringList(_recentSurahsKey, trimmed.map((e) => e.toString()).toList());
+    notifyListeners();
+  }
+
   // --- Last position ---
   Future<void> saveLastPosition(int surahId, int ayahId) async {
     await _prefs.setInt(_lastSurahKey, surahId);
     await _prefs.setInt(_lastAyahKey, ayahId);
+    addRecentSurah(surahId);
     notifyListeners();
   }
 
