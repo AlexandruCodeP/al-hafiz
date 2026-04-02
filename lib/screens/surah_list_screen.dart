@@ -6,6 +6,7 @@ import '../models/surah.dart';
 import '../services/audio_service.dart';
 import '../services/quran_service.dart';
 import '../services/storage_service.dart';
+import '../models/juz_data.dart';
 import '../theme/app_theme.dart';
 import 'reader_screen.dart';
 
@@ -71,6 +72,26 @@ class _SurahListScreenState extends State<SurahListScreen>
     _searchController.dispose();
     _animController.dispose();
     super.dispose();
+  }
+
+  List<Object> _buildSurahListItems() {
+    final isSearching = _searchController.text.isNotEmpty;
+    final items = <Object>[];
+    int lastJuz = 0;
+
+    for (int i = 0; i < _filtered.length; i++) {
+      final surah = _filtered[i];
+      // Only show juz headers when not searching
+      if (!isSearching) {
+        final juz = JuzData.getJuzForSurah(surah.id);
+        if (juz != lastJuz) {
+          items.add(_JuzHeaderItem(juz: juz, page: JuzData.getJuzStartPage(juz)));
+          lastJuz = juz;
+        }
+      }
+      items.add(_SurahItem(surah: surah, originalIndex: i));
+    }
+    return items;
   }
 
   String _getGreeting() {
@@ -200,19 +221,33 @@ class _SurahListScreenState extends State<SurahListScreen>
               ),
             ),
 
-          // ── Surah list ──
+          // ── Surah list with Juz separators ──
           if (!_isLoading)
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(20, 4, 20, 100),
               sliver: SliverList(
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
-                    final surah = _filtered[index];
-                    final progress = storage.getSurahProgress(surah.id, surah.totalVerses);
+                    // Build a flat list with juz headers interleaved
+                    final items = _buildSurahListItems();
+                    if (index >= items.length) return const SizedBox.shrink();
+                    final item = items[index];
+
+                    if (item is _JuzHeaderItem) {
+                      return _JuzHeader(
+                        juz: item.juz,
+                        page: item.page,
+                        isDark: isDark,
+                      );
+                    }
+
+                    final surahItem = item as _SurahItem;
+                    final progress = storage.getSurahProgress(
+                        surahItem.surah.id, surahItem.surah.totalVerses);
 
                     return _SurahTile(
-                      surah: surah,
-                      index: index,
+                      surah: surahItem.surah,
+                      index: surahItem.originalIndex,
                       progress: progress,
                       animation: _animController,
                       isDark: isDark,
@@ -220,13 +255,13 @@ class _SurahListScreenState extends State<SurahListScreen>
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => ReaderScreen(surah: surah),
+                            builder: (_) => ReaderScreen(surah: surahItem.surah),
                           ),
                         );
                       },
                     );
                   },
-                  childCount: _filtered.length,
+                  childCount: _buildSurahListItems().length,
                 ),
               ),
             ),
@@ -1046,6 +1081,73 @@ class _TypeBadge extends StatelessWidget {
           fontSize: 10,
           fontWeight: FontWeight.w600,
         ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// Juz list items
+// ─────────────────────────────────────────────
+class _JuzHeaderItem {
+  final int juz;
+  final int page;
+  const _JuzHeaderItem({required this.juz, required this.page});
+}
+
+class _SurahItem {
+  final Surah surah;
+  final int originalIndex;
+  const _SurahItem({required this.surah, required this.originalIndex});
+}
+
+class _JuzHeader extends StatelessWidget {
+  final int juz;
+  final int page;
+  final bool isDark;
+
+  const _JuzHeader({required this.juz, required this.page, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(top: 12, bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: isDark
+            ? AppColors.primary.withValues(alpha: 0.1)
+            : AppColors.primary.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: AppColors.primary.withValues(alpha: 0.15),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              "Juz' $juz",
+              style: GoogleFonts.poppins(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primary,
+              ),
+            ),
+          ),
+          const Spacer(),
+          Text(
+            'Page $page',
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              color: isDark ? AppColors.textSecondary : AppColors.textSecondaryLight,
+            ),
+          ),
+        ],
       ),
     );
   }
