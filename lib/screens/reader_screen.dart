@@ -12,6 +12,7 @@ import '../widgets/hifz_controls.dart';
 import '../widgets/note_dialog.dart';
 import '../widgets/focus_mode.dart';
 import '../widgets/paper_grain.dart';
+import '../widgets/quran_page_view.dart';
 import '../models/reciter.dart';
 import '../services/quran_service.dart';
 
@@ -31,6 +32,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   bool _focusModeActive = false;
   bool _hideText = false;
   bool _autoScrollEnabled = true;
+  bool _pageMode = false;
   final ScrollController _scrollController = ScrollController();
   late AnimationController _entryAnim;
   AudioService? _audioService;
@@ -142,6 +144,76 @@ class _ReaderScreenState extends State<ReaderScreen>
     });
   }
 
+  Widget _buildPageMode(AudioService audio) {
+    return QuranPageView(
+      surah: _surah,
+      currentPlayingAyahId:
+          audio.currentSurahId == widget.surah.id ? audio.currentAyahId : null,
+      onAyahTap: (ayahId) {
+        audio.playAyah(widget.surah.id, ayahId);
+        context.read<StorageService>().saveLastPosition(widget.surah.id, ayahId);
+      },
+    );
+  }
+
+  Widget _buildVerseMode() {
+    return Consumer2<AudioService, StorageService>(
+      builder: (context, audio, storage, _) {
+        return NotificationListener<ScrollNotification>(
+          onNotification: _onScrollNotification,
+          child: ListView.builder(
+            controller: _scrollController,
+            padding: const EdgeInsets.only(top: 8, bottom: 80),
+            itemCount: _surah.verses.length,
+            itemBuilder: (context, index) {
+              final ayah = _surah.verses[index];
+              final isPlaying = audio.currentSurahId == widget.surah.id &&
+                  audio.currentAyahId == ayah.id;
+              _ayahKeys.putIfAbsent(ayah.id, () => GlobalKey());
+
+              if (isPlaying &&
+                  _autoScrollEnabled &&
+                  _lastScrolledToAyah != ayah.id) {
+                _lastScrolledToAyah = ayah.id;
+                Future.delayed(const Duration(milliseconds: 150), () {
+                  if (mounted && _autoScrollEnabled) {
+                    _scrollToAyah(index);
+                  }
+                });
+              }
+
+              return FocusModeAyahWrapper(
+                key: _ayahKeys[ayah.id],
+                focusModeActive: _focusModeActive,
+                isPlayingAyah: isPlaying,
+                child: AyahCard(
+                  ayah: ayah,
+                  isPlaying: isPlaying,
+                  isFavorite: storage.isFavorite(widget.surah.id, ayah.id),
+                  isMastered: storage.isMastered(widget.surah.id, ayah.id),
+                  hideText: _hideText && !isPlaying,
+                  textSizeMultiplier: storage.textSizeMultiplier,
+                  showArabic: storage.showArabic,
+                  showTranslation: storage.showTranslation,
+                  showPhonetic: storage.showPhonetic,
+                  onTap: () {
+                    audio.playAyah(widget.surah.id, ayah.id);
+                    storage.saveLastPosition(widget.surah.id, ayah.id);
+                  },
+                  onLongPress: () => _showAyahContextMenu(context, ayah),
+                  onFavoriteTap: () =>
+                      storage.toggleFavorite(widget.surah.id, ayah.id),
+                  onMasteredTap: () =>
+                      storage.toggleMastered(widget.surah.id, ayah.id),
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final audio = context.watch<AudioService>();
@@ -159,6 +231,14 @@ class _ReaderScreenState extends State<ReaderScreen>
           ],
         ),
         actions: [
+          IconButton(
+            icon: Icon(
+              _pageMode ? Icons.view_agenda_rounded : Icons.auto_stories_rounded,
+              size: 20,
+            ),
+            tooltip: _pageMode ? 'Mode verset' : 'Mode page',
+            onPressed: () => setState(() => _pageMode = !_pageMode),
+          ),
           IconButton(
             icon: const Icon(Icons.settings_outlined, size: 20),
             onPressed: () => _showSettingsSheet(context),
@@ -204,57 +284,9 @@ class _ReaderScreenState extends State<ReaderScreen>
                 : const SizedBox.shrink(),
           ),
           Expanded(
-            child: Consumer2<AudioService, StorageService>(
-              builder: (context, audio, storage, _) {
-                return NotificationListener<ScrollNotification>(
-                  onNotification: _onScrollNotification,
-                  child: ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.only(top: 8, bottom: 80),
-                  itemCount: _surah.verses.length,
-                  itemBuilder: (context, index) {
-                    final ayah = _surah.verses[index];
-                    final isPlaying = audio.currentSurahId == widget.surah.id && audio.currentAyahId == ayah.id;
-                    _ayahKeys.putIfAbsent(ayah.id, () => GlobalKey());
-
-                    if (isPlaying && _autoScrollEnabled && _lastScrolledToAyah != ayah.id) {
-                      _lastScrolledToAyah = ayah.id;
-                      // Delay slightly to let the new card fully lay out
-                      Future.delayed(const Duration(milliseconds: 150), () {
-                        if (mounted && _autoScrollEnabled) {
-                          _scrollToAyah(index);
-                        }
-                      });
-                    }
-
-                    return FocusModeAyahWrapper(
-                      key: _ayahKeys[ayah.id],
-                      focusModeActive: _focusModeActive,
-                      isPlayingAyah: isPlaying,
-                      child: AyahCard(
-                        ayah: ayah,
-                        isPlaying: isPlaying,
-                        isFavorite: storage.isFavorite(widget.surah.id, ayah.id),
-                        isMastered: storage.isMastered(widget.surah.id, ayah.id),
-                        hideText: _hideText && !isPlaying,
-                        textSizeMultiplier: storage.textSizeMultiplier,
-                        showArabic: storage.showArabic,
-                        showTranslation: storage.showTranslation,
-                        showPhonetic: storage.showPhonetic,
-                        onTap: () {
-                          audio.playAyah(widget.surah.id, ayah.id);
-                          storage.saveLastPosition(widget.surah.id, ayah.id);
-                        },
-                        onLongPress: () => _showAyahContextMenu(context, ayah),
-                        onFavoriteTap: () => storage.toggleFavorite(widget.surah.id, ayah.id),
-                        onMasteredTap: () => storage.toggleMastered(widget.surah.id, ayah.id),
-                      ),
-                    );
-                  },
-                ),
-                );
-              },
-            ),
+            child: _pageMode
+                ? _buildPageMode(audio)
+                : _buildVerseMode(),
           ),
           AudioPlayerBar(
             surahName: widget.surah.transliteration,

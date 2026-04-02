@@ -3,12 +3,14 @@ class Ayah {
   final String text;
   final String? translation;
   final String? phonetic;
+  final int? pageNumber;
 
   const Ayah({
-    required this.id, 
+    required this.id,
     required this.text,
     this.translation,
     this.phonetic,
+    this.pageNumber,
   });
 
   factory Ayah.fromJson(Map<String, dynamic> json) {

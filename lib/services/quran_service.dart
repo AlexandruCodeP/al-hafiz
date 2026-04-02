@@ -7,7 +7,8 @@ import '../models/surah.dart';
 class QuranService {
   static QuranService? _instance;
   List<Surah>? _surahs;
-  
+  Map<int, List<int>>? _pageMap; // surahId -> [page for ayah 1, page for ayah 2, ...]
+
   final Map<int, List<String>> _translationCache = {};
   final Map<int, List<String>> _phoneticCache = {};
 
@@ -16,6 +17,53 @@ class QuranService {
   static QuranService get instance {
     _instance ??= QuranService._();
     return _instance!;
+  }
+
+  Future<Map<int, List<int>>> getPageMap() async {
+    if (_pageMap != null) return _pageMap!;
+    try {
+      final String jsonStr = await rootBundle.loadString('assets/page_map.json');
+      final Map<String, dynamic> raw = json.decode(jsonStr) as Map<String, dynamic>;
+      _pageMap = raw.map((k, v) => MapEntry(int.parse(k), (v as List).cast<int>()));
+      return _pageMap!;
+    } catch (e) {
+      debugPrint('Error loading page_map.json: $e');
+      return {};
+    }
+  }
+
+  /// Get the page number for a specific ayah
+  int? getPageNumber(int surahId, int ayahNumber) {
+    if (_pageMap == null) return null;
+    final pages = _pageMap![surahId];
+    if (pages == null || ayahNumber < 1 || ayahNumber > pages.length) return null;
+    return pages[ayahNumber - 1];
+  }
+
+  /// Get the range of pages for a surah
+  (int, int)? getSurahPageRange(int surahId) {
+    if (_pageMap == null) return null;
+    final pages = _pageMap![surahId];
+    if (pages == null || pages.isEmpty) return null;
+    return (pages.first, pages.last);
+  }
+
+  /// Get all verses that belong to a specific page (across surahs)
+  Future<List<({int surahId, String surahName, Ayah ayah})>> getVersesForPage(int pageNumber) async {
+    final surahs = await getAllSurahs();
+    final pageMap = await getPageMap();
+    final result = <({int surahId, String surahName, Ayah ayah})>[];
+
+    for (final surah in surahs) {
+      final pages = pageMap[surah.id];
+      if (pages == null) continue;
+      for (int i = 0; i < pages.length; i++) {
+        if (pages[i] == pageNumber) {
+          result.add((surahId: surah.id, surahName: surah.name, ayah: surah.verses[i]));
+        }
+      }
+    }
+    return result;
   }
 
   Future<List<Surah>> getAllSurahs() async {
@@ -27,6 +75,8 @@ class QuranService {
       _surahs = jsonList
           .map((s) => Surah.fromJson(s as Map<String, dynamic>))
           .toList();
+      // Pre-load page map
+      await getPageMap();
       return _surahs!;
     } catch (e) {
       debugPrint('Error loading quran.json: $e');
@@ -52,12 +102,13 @@ class QuranService {
         return Ayah(
           id: v.id,
           text: v.text,
-          translation: _translationCache[id] != null && _translationCache[id]!.length >= v.id 
-              ? _translationCache[id]![v.id - 1] 
+          translation: _translationCache[id] != null && _translationCache[id]!.length >= v.id
+              ? _translationCache[id]![v.id - 1]
               : null,
-          phonetic: _phoneticCache[id] != null && _phoneticCache[id]!.length >= v.id 
-              ? _phoneticCache[id]![v.id - 1] 
+          phonetic: _phoneticCache[id] != null && _phoneticCache[id]!.length >= v.id
+              ? _phoneticCache[id]![v.id - 1]
               : null,
+          pageNumber: getPageNumber(id, v.id),
         );
       }).toList(),
     );
