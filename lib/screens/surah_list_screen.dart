@@ -336,13 +336,21 @@ class _HeaderSection extends StatelessWidget {
                 width: double.infinity,
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: isDark
-                      ? AppColors.accent.withValues(alpha: 0.08)
-                      : AppColors.accent.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: AppColors.accent.withValues(alpha: 0.2),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: isDark
+                        ? [const Color(0xFF1A2A20), const Color(0xFF0F1F18)]
+                        : [const Color(0xFF1B5E4B), const Color(0xFF0D3B2E)],
                   ),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withValues(alpha: 0.25),
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
                 ),
                 child: Column(
                   children: [
@@ -350,51 +358,62 @@ class _HeaderSection extends StatelessWidget {
                       children: [
                         Icon(
                           Icons.format_quote_rounded,
-                          color: AppColors.accent.withValues(alpha: 0.6),
+                          color: AppColors.accent.withValues(alpha: 0.8),
                           size: 18,
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          'Verset du jour',
+                          'VERSET DU JOUR',
                           style: GoogleFonts.poppins(
-                            fontSize: 11,
+                            fontSize: 10,
                             fontWeight: FontWeight.w600,
                             color: AppColors.accent,
-                            letterSpacing: 1.2,
+                            letterSpacing: 1.5,
                           ),
                         ),
                         const Spacer(),
-                        Text(
-                          '${dailySurah!.transliteration} ${dailyVerse!.id}',
-                          style: GoogleFonts.poppins(
-                            fontSize: 11,
-                            color: AppColors.accent.withValues(alpha: 0.7),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '${dailySurah!.transliteration} ${dailyVerse!.id}',
+                            style: GoogleFonts.poppins(
+                              fontSize: 10,
+                              color: Colors.white70,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 16),
                     Text(
                       dailyVerse!.text,
                       textAlign: TextAlign.center,
                       textDirection: TextDirection.rtl,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontFamily: 'Scheherazade',
                         fontSize: 22,
                         height: 1.8,
-                        color: isDark ? AppColors.textArabic : Colors.black87,
+                        color: Colors.white,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                     if (dailyVerse!.translation != null) ...[
-                      const SizedBox(height: 10),
+                      Divider(
+                        color: Colors.white.withValues(alpha: 0.1),
+                        height: 24,
+                      ),
                       Text(
                         dailyVerse!.translation!,
                         textAlign: TextAlign.center,
                         style: GoogleFonts.poppins(
                           fontSize: 12,
-                          color: isDark ? AppColors.textSecondary : AppColors.textSecondaryLight,
+                          color: Colors.white70,
                           fontStyle: FontStyle.italic,
                           height: 1.4,
                         ),
@@ -670,7 +689,7 @@ class _RecentSurahsSection extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           SizedBox(
-            height: 80,
+            height: 88,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 20),

@@ -30,7 +30,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   bool _showHifzControls = false;
   bool _focusModeActive = false;
   bool _hideText = false;
-  bool _userIsScrolling = false;
+  bool _autoScrollEnabled = true;
   final ScrollController _scrollController = ScrollController();
   late AnimationController _entryAnim;
   AudioService? _audioService;
@@ -47,14 +47,7 @@ class _ReaderScreenState extends State<ReaderScreen>
       duration: const Duration(milliseconds: 600),
     )..forward();
 
-    _scrollController.addListener(() {
-      if (_scrollController.position.isScrollingNotifier.value) {
-        _userIsScrolling = true;
-        Future.delayed(const Duration(seconds: 2), () {
-          _userIsScrolling = false;
-        });
-      }
-    });
+    _scrollController.addListener(_onUserScroll);
 
     _loadEnrichedSurah();
 
@@ -96,8 +89,19 @@ class _ReaderScreenState extends State<ReaderScreen>
     super.dispose();
   }
 
+  bool _isAutoScrolling = false;
+
+  void _onUserScroll() {
+    // Ignore scroll events caused by our own animateTo
+    if (_isAutoScrolling) return;
+
+    if (_scrollController.position.isScrollingNotifier.value && _autoScrollEnabled) {
+      setState(() => _autoScrollEnabled = false);
+    }
+  }
+
   void _scrollToAyah(int ayahIndex) {
-    if (!_scrollController.hasClients || _userIsScrolling) return;
+    if (!_scrollController.hasClients || !_autoScrollEnabled) return;
 
     final ayahId = ayahIndex + 1;
     final key = _ayahKeys[ayahId];
@@ -110,14 +114,31 @@ class _ReaderScreenState extends State<ReaderScreen>
         .findRenderObject() as RenderBox?;
     if (scrollBox == null) return;
 
+    // Get card position and size
     final cardOffset = renderObj.localToGlobal(Offset.zero, ancestor: scrollBox);
-    final target = _scrollController.offset + cardOffset.dy - 80; // 80px top padding
+    final cardHeight = renderObj.size.height;
+    final viewportHeight = _scrollController.position.viewportDimension;
 
+    // Center the card vertically in the viewport
+    final target = _scrollController.offset + cardOffset.dy - (viewportHeight - cardHeight) / 2;
+
+    _isAutoScrolling = true;
     _scrollController.animateTo(
       target.clamp(0, _scrollController.position.maxScrollExtent),
       duration: const Duration(milliseconds: 400),
       curve: Curves.easeInOut,
-    );
+    ).then((_) {
+      _isAutoScrolling = false;
+    });
+  }
+
+  void _jumpToCurrentVerse() {
+    final audio = _audioService;
+    if (audio == null || audio.currentAyahId == null) return;
+    if (audio.currentSurahId != widget.surah.id) return;
+
+    setState(() => _autoScrollEnabled = true);
+    _scrollToAyah(audio.currentAyahId! - 1);
   }
 
   @override
@@ -152,7 +173,9 @@ class _ReaderScreenState extends State<ReaderScreen>
         ],
       ),
       body: PaperGrainOverlay(
-        child: Column(
+        child: Stack(
+        children: [
+         Column(
         children: [
           // Mini player bar when viewing a different surah than the one playing
           if (showMiniPlayer)
@@ -199,7 +222,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                     final isPlaying = audio.currentSurahId == widget.surah.id && audio.currentAyahId == ayah.id;
                     _ayahKeys.putIfAbsent(ayah.id, () => GlobalKey());
 
-                    if (isPlaying && !_userIsScrolling) {
+                    if (isPlaying && _autoScrollEnabled) {
                       WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToAyah(index));
                     }
 
@@ -238,6 +261,21 @@ class _ReaderScreenState extends State<ReaderScreen>
             displayedSurahId: widget.surah.id,
             onExpandHifz: () => setState(() => _showHifzControls = !_showHifzControls),
           ),
+        ],
+      ),
+          // "Return to current verse" FAB
+          if (!_autoScrollEnabled &&
+              audio.currentSurahId == widget.surah.id &&
+              audio.currentAyahId != null)
+            Positioned(
+              right: 16,
+              bottom: 160,
+              child: FloatingActionButton.small(
+                onPressed: _jumpToCurrentVerse,
+                backgroundColor: AppColors.primary,
+                child: const Icon(Icons.vertical_align_center_rounded, color: Colors.white, size: 20),
+              ),
+            ),
         ],
       ),
       ),
