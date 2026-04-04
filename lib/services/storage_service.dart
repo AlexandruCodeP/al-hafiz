@@ -42,6 +42,7 @@ class StorageService extends ChangeNotifier {
   static const _bookmarksKey = 'bookmarks';
   static const _reciterKey = 'reciter_id';
   static const _recentSurahsKey = 'recent_surahs';
+  static const _onboardingCompleteKey = 'onboarding_complete';
 
   final SharedPreferences _prefs;
 
@@ -249,6 +250,13 @@ class StorageService extends ChangeNotifier {
 
   bool isBookmarked(int surahId, int ayahId) {
     return getBookmarks().contains('$surahId:$ayahId');
+  }
+
+  // --- Onboarding ---
+  bool get onboardingComplete => _prefs.getBool(_onboardingCompleteKey) ?? false;
+  Future<void> setOnboardingComplete() async {
+    await _prefs.setBool(_onboardingCompleteKey, true);
+    notifyListeners();
   }
 
   // --- Reciter ---

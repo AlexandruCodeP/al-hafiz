@@ -9,6 +9,7 @@ import '../services/storage_service.dart';
 import '../models/juz_data.dart';
 import '../theme/app_theme.dart';
 import 'reader_screen.dart';
+import 'search_screen.dart';
 
 class SurahListScreen extends StatefulWidget {
   const SurahListScreen({super.key});
@@ -863,7 +864,20 @@ class _SearchBar extends StatelessWidget {
                     onChanged('');
                   },
                 )
-              : null,
+              : IconButton(
+                  icon: Icon(
+                    Icons.manage_search_rounded,
+                    color: AppColors.primary,
+                    size: 22,
+                  ),
+                  tooltip: 'Rechercher dans le texte',
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const SearchScreen()),
+                    );
+                  },
+                ),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
         ),

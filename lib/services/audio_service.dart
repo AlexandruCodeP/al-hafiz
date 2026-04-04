@@ -1,4 +1,5 @@
 import 'package:just_audio/just_audio.dart';
+import 'package:just_audio_background/just_audio_background.dart';
 import 'package:flutter/foundation.dart';
 import '../models/reciter.dart';
 
@@ -102,7 +103,17 @@ class AudioService extends ChangeNotifier {
       notifyListeners();
 
       final url = _buildAudioUrl(surahId, ayahId);
-      await _player.setUrl(url);
+      await _player.setAudioSource(
+        AudioSource.uri(
+          Uri.parse(url),
+          tag: MediaItem(
+            id: '$surahId:$ayahId',
+            title: 'Verset $ayahId',
+            artist: _currentReciter.displayName,
+            album: 'Al-Hafiz',
+          ),
+        ),
+      );
       _isLoading = false;
       notifyListeners();
       await _player.play();

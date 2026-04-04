@@ -153,4 +153,57 @@ class QuranService {
           s.id.toString() == query;
     }).toList();
   }
+
+  /// Fetch tafsir for a specific ayah (Ibn Kathir in French, ID 816)
+  Future<String?> fetchTafsir(int surahId, int ayahId) async {
+    try {
+      final verseKey = '$surahId:$ayahId';
+      final response = await http.get(Uri.parse(
+          'https://api.quran.com/api/v4/quran/tafsirs/816?verse_key=$verseKey'));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final tafsirs = data['tafsirs'] as List;
+        if (tafsirs.isNotEmpty) {
+          return _cleanHtml(tafsirs.first['text'] as String);
+        }
+      }
+      // Fallback: try Arabic tafsir (Ibn Kathir Arabic, ID 169)
+      final fallback = await http.get(Uri.parse(
+          'https://api.quran.com/api/v4/quran/tafsirs/169?verse_key=$verseKey'));
+      if (fallback.statusCode == 200) {
+        final data = json.decode(fallback.body);
+        final tafsirs = data['tafsirs'] as List;
+        if (tafsirs.isNotEmpty) {
+          return _cleanHtml(tafsirs.first['text'] as String);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching tafsir: $e');
+    }
+    return null;
+  }
+
+  /// Search within the text of all verses (Arabic)
+  List<({int surahId, String surahName, String transliteration, Ayah ayah})> searchVerses(String query) {
+    if (_surahs == null || query.trim().isEmpty) return [];
+    final q = query.toLowerCase();
+    final results = <({int surahId, String surahName, String transliteration, Ayah ayah})>[];
+
+    for (final surah in _surahs!) {
+      for (final ayah in surah.verses) {
+        if (ayah.text.contains(query) ||
+            (ayah.translation != null && ayah.translation!.toLowerCase().contains(q)) ||
+            (ayah.phonetic != null && ayah.phonetic!.toLowerCase().contains(q))) {
+          results.add((
+            surahId: surah.id,
+            surahName: surah.name,
+            transliteration: surah.transliteration,
+            ayah: ayah,
+          ));
+        }
+      }
+      if (results.length >= 50) break; // Limit results
+    }
+    return results;
+  }
 }

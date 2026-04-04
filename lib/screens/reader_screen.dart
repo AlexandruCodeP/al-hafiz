@@ -463,6 +463,28 @@ class _ReaderScreenState extends State<ReaderScreen>
     );
   }
 
+  void _showTafsir(BuildContext context, Ayah ayah) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.3,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (context, scrollController) => _TafsirSheet(
+          surahId: widget.surah.id,
+          surahName: widget.surah.transliteration,
+          ayah: ayah,
+          scrollController: scrollController,
+        ),
+      ),
+    );
+  }
+
   void _showAyahContextMenu(BuildContext context, Ayah ayah) {
     final storage = context.read<StorageService>();
     showModalBottomSheet(
@@ -501,6 +523,14 @@ class _ReaderScreenState extends State<ReaderScreen>
                 if (result != null) {
                   storage.saveNote(widget.surah.id, ayah.id, result);
                 }
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.menu_book_outlined),
+              title: const Text('Tafsir (exégèse)'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showTafsir(context, ayah);
               },
             ),
           ],
@@ -576,6 +606,151 @@ class _MiniPlayerBar extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _TafsirSheet extends StatefulWidget {
+  final int surahId;
+  final String surahName;
+  final Ayah ayah;
+  final ScrollController scrollController;
+
+  const _TafsirSheet({
+    required this.surahId,
+    required this.surahName,
+    required this.ayah,
+    required this.scrollController,
+  });
+
+  @override
+  State<_TafsirSheet> createState() => _TafsirSheetState();
+}
+
+class _TafsirSheetState extends State<_TafsirSheet> {
+  String? _tafsirText;
+  bool _isLoading = true;
+  bool _hasError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTafsir();
+  }
+
+  Future<void> _loadTafsir() async {
+    final text = await QuranService.instance.fetchTafsir(widget.surahId, widget.ayah.id);
+    if (mounted) {
+      setState(() {
+        _tafsirText = text;
+        _isLoading = false;
+        _hasError = text == null;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Column(
+      children: [
+        Container(
+          margin: const EdgeInsets.only(top: 12),
+          width: 40,
+          height: 4,
+          decoration: BoxDecoration(
+            color: AppColors.textSecondary.withValues(alpha: 0.3),
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Text(
+                'Tafsir',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? AppColors.textPrimary : AppColors.textPrimaryLight,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${widget.surahName} - Verset ${widget.ayah.id}',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isDark ? AppColors.textSecondary : AppColors.textSecondaryLight,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  widget.ayah.text,
+                  style: const TextStyle(
+                    fontFamily: 'Scheherazade',
+                    fontSize: 22,
+                    height: 1.8,
+                    color: AppColors.accent,
+                  ),
+                  textDirection: TextDirection.rtl,
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _hasError
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(
+                          'Tafsir non disponible pour ce verset',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: isDark ? AppColors.textSecondary : AppColors.textSecondaryLight,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    )
+                  : ListView(
+                      controller: widget.scrollController,
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        Text(
+                          _tafsirText!,
+                          style: TextStyle(
+                            fontSize: 15,
+                            height: 1.7,
+                            color: isDark ? AppColors.textPrimary : AppColors.textPrimaryLight,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Source : Ibn Kathir',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontStyle: FontStyle.italic,
+                            color: isDark ? AppColors.textSecondary : AppColors.textSecondaryLight,
+                          ),
+                          textAlign: TextAlign.end,
+                        ),
+                      ],
+                    ),
+        ),
+      ],
     );
   }
 }

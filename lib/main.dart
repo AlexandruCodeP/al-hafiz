@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:just_audio_background/just_audio_background.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'models/reciter.dart';
 import 'services/audio_service.dart';
@@ -11,11 +12,16 @@ import 'services/storage_service.dart';
 import 'screens/auth_screen.dart';
 import 'screens/surah_list_screen.dart';
 import 'screens/favorites_screen.dart';
+import 'screens/onboarding_screen.dart';
 import 'screens/settings_screen.dart';
 import 'theme/app_theme.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  await JustAudioBackground.init(
+    androidNotificationChannelId: 'com.alhafiz.audio',
+    androidNotificationChannelName: 'Al-Hafiz Audio',
+    androidNotificationOngoing: true,
+  );
 
   await Supabase.initialize(
     url: 'https://swtanfnprpddnsgzmsgn.supabase.co',
@@ -82,13 +88,20 @@ class _AuthGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final storage = context.watch<StorageService>();
+
     return ListenableBuilder(
       listenable: authService,
       builder: (context, _) {
-        if (authService.isLoggedIn) {
-          return const _MainShell();
+        if (!authService.isLoggedIn) {
+          return AuthScreen(authService: authService);
         }
-        return AuthScreen(authService: authService);
+        if (!storage.onboardingComplete) {
+          return OnboardingScreen(
+            onComplete: () => storage.setOnboardingComplete(),
+          );
+        }
+        return const _MainShell();
       },
     );
   }
