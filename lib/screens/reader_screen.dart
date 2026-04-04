@@ -369,21 +369,6 @@ class _ReaderScreenState extends State<ReaderScreen>
                       onChanged: (v) => storage.setShowTranslation(v),
                     ),
                     const Divider(),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Mode Sombre'),
-                        SegmentedButton<ThemeMode>(
-                          segments: const [
-                            ButtonSegment(value: ThemeMode.light, icon: Icon(Icons.light_mode)),
-                            ButtonSegment(value: ThemeMode.dark, icon: Icon(Icons.dark_mode)),
-                          ],
-                          selected: {storage.themeMode},
-                          onSelectionChanged: (v) => storage.setThemeMode(v.first),
-                        ),
-                      ],
-                    ),
-                    const Divider(),
                     const SizedBox(height: 8),
                     const Text('Récitateur', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 8),

@@ -11,6 +11,7 @@ import 'services/storage_service.dart';
 import 'screens/auth_screen.dart';
 import 'screens/surah_list_screen.dart';
 import 'screens/favorites_screen.dart';
+import 'screens/settings_screen.dart';
 import 'theme/app_theme.dart';
 
 void main() async {
@@ -116,6 +117,7 @@ class _MainShellState extends State<_MainShell> {
           FavoritesScreen(
             storageService: storage,
           ),
+          const SettingsScreen(),
         ],
       ),
       bottomNavigationBar: Container(
@@ -147,6 +149,11 @@ class _MainShellState extends State<_MainShell> {
               icon: Icon(Icons.bookmark_outline_rounded, color: AppColors.textSecondary),
               selectedIcon: Icon(Icons.bookmark_rounded, color: AppColors.accent),
               label: 'Révisions',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.settings_outlined, color: AppColors.textSecondary),
+              selectedIcon: Icon(Icons.settings_rounded, color: AppColors.primary),
+              label: 'Réglages',
             ),
           ],
         ),
