@@ -60,14 +60,15 @@ class _ReaderScreenState extends State<ReaderScreen>
       hifz.setRange(1, widget.surah.totalVerses);
 
       _audioService!.onVerseComplete = () {
-        if (_audioService!.currentAyahId != null && _audioService!.currentAyahId! < widget.surah.totalVerses) {
-          _audioService!.playAyah(widget.surah.id, _audioService!.currentAyahId! + 1);
+        // Scroll to the new verse in the UI
+        if (_audioService!.currentAyahId != null) {
+          _scrollToAyah(_audioService!.currentAyahId! - 1);
         }
       };
 
       if (widget.initialAyahId != null) {
         _scrollToAyah(widget.initialAyahId! - 1);
-        _audioService!.playAyah(widget.surah.id, widget.initialAyahId!);
+        _audioService!.playAyah(widget.surah.id, widget.initialAyahId!, widget.surah.totalVerses);
       }
     });
   }
@@ -205,7 +206,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                   showTranslation: storage.showTranslation,
                   showPhonetic: storage.showPhonetic,
                   onTap: () {
-                    audio.playAyah(widget.surah.id, ayah.id);
+                    audio.playAyah(widget.surah.id, ayah.id, widget.surah.totalVerses);
                     storage.saveLastPosition(widget.surah.id, ayah.id);
                   },
                   onLongPress: () => _showAyahContextMenu(context, ayah),

@@ -160,6 +160,7 @@ class AudioPlayerBar extends StatelessWidget {
                             audio.playAyah(
                               audio.currentSurahId!,
                               audio.currentAyahId! - 1,
+                              totalVerses,
                             );
                           }
                         },
@@ -175,7 +176,7 @@ class AudioPlayerBar extends StatelessWidget {
                           if (displayedSurahId != null &&
                               audio.currentSurahId != displayedSurahId &&
                               !audio.isPlaying) {
-                            audio.playAyah(displayedSurahId!, 1);
+                            audio.playAyah(displayedSurahId!, 1, totalVerses);
                           } else {
                             audio.togglePlayPause();
                           }
@@ -192,6 +193,7 @@ class AudioPlayerBar extends StatelessWidget {
                             audio.playAyah(
                               audio.currentSurahId!,
                               audio.currentAyahId! + 1,
+                              totalVerses,
                             );
                           }
                         },

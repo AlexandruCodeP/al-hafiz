@@ -12,6 +12,7 @@ class AudioService extends ChangeNotifier {
   bool _isPlaying = false;
   int? _currentSurahId;
   int? _currentAyahId;
+  int _currentSurahTotalVerses = 0;
   bool _isLoading = false;
   bool _continuousReading = true; // Feature: basique play follows next
 
@@ -20,7 +21,7 @@ class AudioService extends ChangeNotifier {
   Duration? _clipEnd;
   bool _abRepeatActive = false;
 
-  // Callback for automatic next verse
+  // Callback for UI updates (e.g. scroll to verse)
   VoidCallback? onVerseComplete;
 
   AudioService() {
@@ -42,9 +43,13 @@ class AudioService extends ChangeNotifier {
       _isPlaying = state.playing;
       if (state.processingState == ProcessingState.completed) {
         _isPlaying = false;
-        if (_continuousReading && onVerseComplete != null) {
-          onVerseComplete!();
+        notifyListeners();
+        if (_continuousReading && _currentAyahId != null && _currentAyahId! < _currentSurahTotalVerses) {
+          final nextAyah = _currentAyahId! + 1;
+          playAyah(_currentSurahId!, nextAyah, _currentSurahTotalVerses);
+          onVerseComplete?.call();
         }
+        return;
       }
       notifyListeners();
     });
@@ -87,8 +92,10 @@ class AudioService extends ChangeNotifier {
   /// Whether the current reciter provides audio per-surah (not per-ayah)
   bool get isPerSurahSource => _currentReciter.source == ReciterSource.mp3quran;
 
-  Future<void> playAyah(int surahId, int ayahId) async {
+  Future<void> playAyah(int surahId, int ayahId, [int? totalVerses]) async {
     try {
+      if (totalVerses != null) _currentSurahTotalVerses = totalVerses;
+
       // For per-surah sources, don't reload if same surah is already loaded
       if (isPerSurahSource && _currentSurahId == surahId && _isPlaying) {
         _currentAyahId = ayahId;
