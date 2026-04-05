@@ -156,7 +156,7 @@ class _SurahListScreenState extends State<SurahListScreen>
               delegate: _ContinueReadingHeaderDelegate(
                 child: Container(
                   color: Theme.of(context).scaffoldBackgroundColor,
-                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
                   child: _ContinueReadingCard(
                     surahId: playerSurahId,
                     ayahId: playerAyahId,
@@ -229,7 +229,7 @@ class _SurahListScreenState extends State<SurahListScreen>
           // ── Surah list with Juz separators ──
           if (!_isLoading)
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 100),
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
               sliver: SliverList(
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
@@ -702,9 +702,9 @@ class _ContinueReadingHeaderDelegate extends SliverPersistentHeaderDelegate {
   _ContinueReadingHeaderDelegate({required this.child});
 
   @override
-  double get minExtent => 96;
+  double get minExtent => 104;
   @override
-  double get maxExtent => 96;
+  double get maxExtent => 104;
 
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
