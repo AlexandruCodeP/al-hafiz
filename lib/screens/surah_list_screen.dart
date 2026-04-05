@@ -149,34 +149,38 @@ class _SurahListScreenState extends State<SurahListScreen>
               ),
             ),
 
-          // ── Continue reading ──
+          // ── Continue reading (pinned) ──
           if (!_isLoading && playerSurahId != null)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-                child: _ContinueReadingCard(
-                  surahId: playerSurahId,
-                  ayahId: playerAyahId,
-                  isPlaying: audio.isPlaying && audio.currentSurahId == playerSurahId,
-                  isDark: isDark,
-                  onTap: () async {
-                    final surah = await QuranService.instance.getSurah(playerSurahId);
-                    if (mounted) {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => ReaderScreen(surah: surah, initialAyahId: playerAyahId),
-                        ),
-                      );
-                    }
-                  },
-                  onPlayPause: () {
-                    if (audio.currentSurahId != null) {
-                      audio.togglePlayPause();
-                    } else {
-                      audio.playAyah(playerSurahId, playerAyahId);
-                    }
-                  },
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _ContinueReadingHeaderDelegate(
+                child: Container(
+                  color: Theme.of(context).scaffoldBackgroundColor,
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                  child: _ContinueReadingCard(
+                    surahId: playerSurahId,
+                    ayahId: playerAyahId,
+                    isPlaying: audio.isPlaying && audio.currentSurahId == playerSurahId,
+                    isDark: isDark,
+                    onTap: () async {
+                      final surah = await QuranService.instance.getSurah(playerSurahId);
+                      if (mounted) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ReaderScreen(surah: surah, initialAyahId: playerAyahId),
+                          ),
+                        );
+                      }
+                    },
+                    onPlayPause: () {
+                      if (audio.currentSurahId != null) {
+                        audio.togglePlayPause();
+                      } else {
+                        audio.playAyah(playerSurahId, playerAyahId);
+                      }
+                    },
+                  ),
                 ),
               ),
             ),
@@ -687,6 +691,28 @@ class _ContinueReadingCard extends StatelessWidget {
       ),
     );
   }
+}
+
+// ─────────────────────────────────────────────
+// Continue Reading Pinned Header Delegate
+// ─────────────────────────────────────────────
+class _ContinueReadingHeaderDelegate extends SliverPersistentHeaderDelegate {
+  final Widget child;
+
+  _ContinueReadingHeaderDelegate({required this.child});
+
+  @override
+  double get minExtent => 96;
+  @override
+  double get maxExtent => 96;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return child;
+  }
+
+  @override
+  bool shouldRebuild(covariant _ContinueReadingHeaderDelegate oldDelegate) => true;
 }
 
 // ─────────────────────────────────────────────
