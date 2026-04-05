@@ -14,7 +14,11 @@ class AudioService extends ChangeNotifier {
   int? _currentAyahId;
   int _currentSurahTotalVerses = 0;
   bool _isLoading = false;
-  bool _continuousReading = true; // Feature: basique play follows next
+  bool _continuousReading = true;
+
+  // Playlist for gapless per-ayah playback
+  ConcatenatingAudioSource? _playlist;
+  int? _playlistSurahId;
 
   // A-B Repeat
   Duration? _clipStart;
@@ -27,7 +31,6 @@ class AudioService extends ChangeNotifier {
   AudioService() {
     _player.positionStream.listen((pos) {
       _position = pos;
-      // A-B repeat logic
       if (_abRepeatActive && _clipEnd != null && pos >= _clipEnd!) {
         _player.seek(_clipStart ?? Duration.zero);
       }
@@ -39,17 +42,31 @@ class AudioService extends ChangeNotifier {
       notifyListeners();
     });
 
+    // Track verse changes in playlist mode
+    _player.currentIndexStream.listen((index) {
+      if (index != null && _playlist != null && _playlistSurahId != null) {
+        final newAyahId = index + 1;
+        if (_currentAyahId != null && _currentAyahId != newAyahId) {
+          _currentAyahId = newAyahId;
+          onVerseComplete?.call();
+          notifyListeners();
+        } else {
+          _currentAyahId = newAyahId;
+        }
+      }
+    });
+
     _player.playerStateStream.listen((state) {
       _isPlaying = state.playing;
       if (state.processingState == ProcessingState.completed) {
         _isPlaying = false;
-        notifyListeners();
-        if (_continuousReading && _currentAyahId != null && _currentAyahId! < _currentSurahTotalVerses) {
+        // For single-source (per-surah) mode, handle next verse manually
+        if (_playlist == null && _continuousReading && _currentAyahId != null && _currentAyahId! < _currentSurahTotalVerses) {
           final nextAyah = _currentAyahId! + 1;
           playAyah(_currentSurahId!, nextAyah, _currentSurahTotalVerses);
           onVerseComplete?.call();
+          return;
         }
-        return;
       }
       notifyListeners();
     });
@@ -96,31 +113,76 @@ class AudioService extends ChangeNotifier {
     try {
       if (totalVerses != null) _currentSurahTotalVerses = totalVerses;
 
-      // For per-surah sources, don't reload if same surah is already loaded
-      if (isPerSurahSource && _currentSurahId == surahId && _isPlaying) {
+      // ── Per-surah sources: single file, no playlist needed ──
+      if (isPerSurahSource) {
+        _playlist = null;
+        _playlistSurahId = null;
+
+        if (_currentSurahId == surahId && _isPlaying) {
+          _currentAyahId = ayahId;
+          notifyListeners();
+          return;
+        }
+
+        _isLoading = true;
+        _currentSurahId = surahId;
         _currentAyahId = ayahId;
+        clearClip();
+        notifyListeners();
+
+        final url = _buildAudioUrl(surahId, ayahId);
+        await _player.setAudioSource(
+          AudioSource.uri(
+            Uri.parse(url),
+            tag: MediaItem(
+              id: '$surahId:$ayahId',
+              title: 'Verset $ayahId',
+              artist: _currentReciter.displayName,
+              album: 'Al-Hafiz',
+            ),
+          ),
+        );
+        _isLoading = false;
+        notifyListeners();
+        await _player.play();
+        return;
+      }
+
+      // ── Per-ayah sources: gapless playlist ──
+      _currentSurahId = surahId;
+      _currentAyahId = ayahId;
+
+      // If same surah already loaded as playlist, just seek to the right track
+      if (_playlistSurahId == surahId && _playlist != null) {
+        final index = ayahId - 1;
+        await _player.seek(Duration.zero, index: index);
+        if (!_isPlaying) await _player.play();
         notifyListeners();
         return;
       }
 
+      // Build new playlist with all verses
       _isLoading = true;
-      _currentSurahId = surahId;
-      _currentAyahId = ayahId;
       clearClip();
       notifyListeners();
 
-      final url = _buildAudioUrl(surahId, ayahId);
-      await _player.setAudioSource(
-        AudioSource.uri(
-          Uri.parse(url),
+      final sources = <AudioSource>[];
+      for (int i = 1; i <= _currentSurahTotalVerses; i++) {
+        sources.add(AudioSource.uri(
+          Uri.parse(_buildAudioUrl(surahId, i)),
           tag: MediaItem(
-            id: '$surahId:$ayahId',
-            title: 'Verset $ayahId',
+            id: '$surahId:$i',
+            title: 'Verset $i',
             artist: _currentReciter.displayName,
             album: 'Al-Hafiz',
           ),
-        ),
-      );
+        ));
+      }
+
+      _playlist = ConcatenatingAudioSource(children: sources);
+      _playlistSurahId = surahId;
+
+      await _player.setAudioSource(_playlist!, initialIndex: ayahId - 1);
       _isLoading = false;
       notifyListeners();
       await _player.play();
@@ -136,7 +198,7 @@ class AudioService extends ChangeNotifier {
       await _player.pause();
     } else {
       if (_player.processingState == ProcessingState.completed) {
-        await _player.seek(Duration.zero);
+        await _player.seek(Duration.zero, index: 0);
       }
       await _player.play();
     }
@@ -149,6 +211,8 @@ class AudioService extends ChangeNotifier {
   Future<void> stop() async {
     await _player.stop();
     _isPlaying = false;
+    _playlist = null;
+    _playlistSurahId = null;
     notifyListeners();
   }
 
