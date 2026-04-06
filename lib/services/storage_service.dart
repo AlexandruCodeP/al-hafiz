@@ -265,4 +265,111 @@ class StorageService extends ChangeNotifier {
     await _prefs.setString(_reciterKey, id);
     notifyListeners();
   }
+
+  // --- Export / Import / Reset ---
+  String exportToJson() {
+    final data = <String, dynamic>{
+      'version': 1,
+      'exportedAt': DateTime.now().toIso8601String(),
+      'favorites': getFavorites().map((f) => f.toJson()).toList(),
+      'mastered': getMasteredAyahs().toList(),
+      'notes': getNotes(),
+      'bookmarks': getBookmarks(),
+      'lastSurah': _prefs.getInt(_lastSurahKey),
+      'lastAyah': _prefs.getInt(_lastAyahKey),
+      'recentSurahs': getRecentSurahs(),
+      'settings': {
+        'textSize': textSizeMultiplier,
+        'themeMode': themeMode.name,
+        'showArabic': showArabic,
+        'showTranslation': showTranslation,
+        'showPhonetic': showPhonetic,
+        'reciterId': reciterId,
+      },
+    };
+    return json.encode(data);
+  }
+
+  Future<void> importFromJson(String jsonString) async {
+    final data = json.decode(jsonString) as Map<String, dynamic>;
+
+    // Favorites
+    if (data['favorites'] != null) {
+      final favs = (data['favorites'] as List)
+          .map((e) => FavoriteItem.fromJson(e as Map<String, dynamic>))
+          .toList();
+      await saveFavorites(favs);
+    }
+
+    // Mastered
+    if (data['mastered'] != null) {
+      final mastered = (data['mastered'] as List).cast<String>().toSet();
+      _masteredCache = mastered;
+      await _prefs.setStringList(_masteredKey, mastered.toList());
+    }
+
+    // Notes
+    if (data['notes'] != null) {
+      final notes = Map<String, String>.from(data['notes'] as Map);
+      _notesCache = notes;
+      await _prefs.setString(_notesKey, json.encode(notes));
+    }
+
+    // Bookmarks
+    if (data['bookmarks'] != null) {
+      final bookmarks = (data['bookmarks'] as List).cast<String>();
+      _bookmarksCache = bookmarks;
+      await _prefs.setStringList(_bookmarksKey, bookmarks);
+    }
+
+    // Last position
+    if (data['lastSurah'] != null) {
+      await _prefs.setInt(_lastSurahKey, data['lastSurah'] as int);
+    }
+    if (data['lastAyah'] != null) {
+      await _prefs.setInt(_lastAyahKey, data['lastAyah'] as int);
+    }
+
+    // Recent surahs
+    if (data['recentSurahs'] != null) {
+      final recent = (data['recentSurahs'] as List).cast<int>();
+      await _prefs.setStringList(_recentSurahsKey, recent.map((e) => e.toString()).toList());
+    }
+
+    // Settings
+    if (data['settings'] != null) {
+      final s = data['settings'] as Map<String, dynamic>;
+      if (s['textSize'] != null) await setTextSizeMultiplier((s['textSize'] as num).toDouble());
+      if (s['themeMode'] != null) {
+        final mode = ThemeMode.values.firstWhere(
+          (m) => m.name == s['themeMode'],
+          orElse: () => ThemeMode.system,
+        );
+        await setThemeMode(mode);
+      }
+      if (s['showArabic'] != null) await setShowArabic(s['showArabic'] as bool);
+      if (s['showTranslation'] != null) await setShowTranslation(s['showTranslation'] as bool);
+      if (s['showPhonetic'] != null) await setShowPhonetic(s['showPhonetic'] as bool);
+      if (s['reciterId'] != null) await setReciterId(s['reciterId'] as String);
+    }
+
+    notifyListeners();
+  }
+
+  Future<void> resetAllData() async {
+    await _prefs.remove(_favoritesKey);
+    await _prefs.remove(_notesKey);
+    await _prefs.remove(_masteredKey);
+    await _prefs.remove(_bookmarksKey);
+    await _prefs.remove(_lastSurahKey);
+    await _prefs.remove(_lastAyahKey);
+    await _prefs.remove(_recentSurahsKey);
+
+    _favoritesCache = null;
+    _masteredCache = null;
+    _bookmarksCache = null;
+    _notesCache = null;
+
+    notifyListeners();
+  }
 }
