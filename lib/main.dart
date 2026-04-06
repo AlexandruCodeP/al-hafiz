@@ -14,6 +14,8 @@ import 'screens/settings_screen.dart';
 import 'theme/app_theme.dart';
 
 void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
   await JustAudioBackground.init(
     androidNotificationChannelId: 'com.alhafiz.audio',
     androidNotificationChannelName: 'Al-Hafiz Audio',
