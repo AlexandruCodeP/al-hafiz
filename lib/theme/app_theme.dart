@@ -2,27 +2,34 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AppColors {
-  static const background = Color(0xFF121212);
-  static const surface = Color(0xFF1E1E1E);
-  static const surfaceLight = Color(0xFF2A2A2A);
-  static const primary = Color(0xFF006D5B);
-  static const primaryLight = Color(0xFF00917A);
+  // ── Dark Mode ──
+  static const background = Color(0xFF1A1612);
+  static const surface = Color(0xFF241F1A);
+  static const surfaceLight = Color(0xFF2E2822);
+  static const primary = Color(0xFFBE8C3C);
+  static const primaryLight = Color(0xFFD4A84A);
   static const accent = Color(0xFFD4AF37);
   static const accentLight = Color(0xFFE8C84A);
-  static const textPrimary = Color(0xFFE0E0E0);
-  static const textSecondary = Color(0xFF9E9E9E);
-  static const textArabic = Color(0xFFF5F5F5);
-  static const divider = Color(0xFF333333);
+  static const textPrimary = Color(0xFFE8E0D6);
+  static const textSecondary = Color(0xFF9E9589);
+  static const textArabic = Color(0xFFF5F0E8);
+  static const divider = Color(0xFF3A332B);
   static const error = Color(0xFFCF6679);
-  static const meccan = Color(0xFF006D5B);
-  static const medinan = Color(0xFF1565C0);
+  static const meccan = Color(0xFFBE8C3C);
+  static const medinan = Color(0xFF7A9BBF);
 
-  // Light Theme Colors
-  static const backgroundLight = Color(0xFFF8F9FA);
+  // ── Light Mode ──
+  static const backgroundLight = Color(0xFFF9F5F0);
   static const surfaceLightT = Color(0xFFFFFFFF);
-  static const textPrimaryLight = Color(0xFF212121);
-  static const textSecondaryLight = Color(0xFF757575);
-  static const dividerLight = Color(0xFFEEEEEE);
+  static const textPrimaryLight = Color(0xFF2C1F0E);
+  static const textSecondaryLight = Color(0xFF8C7B6B);
+  static const dividerLight = Color(0xFFEDE6DD);
+
+  // ── Gradient colors ──
+  static const gradientStart = Color(0xFFF5E6C8);
+  static const gradientEnd = Color(0xFFE8C88A);
+  static const gradientDarkStart = Color(0xFF3A2E1E);
+  static const gradientDarkEnd = Color(0xFF2A2015);
 }
 
 class AppTheme {
@@ -46,7 +53,7 @@ class AppTheme {
           fontWeight: FontWeight.w600,
           color: AppColors.textPrimary,
         ),
-        iconTheme: const IconThemeData(color: AppColors.accent),
+        iconTheme: const IconThemeData(color: AppColors.primary),
       ),
       textTheme: _textTheme(AppColors.textPrimary, AppColors.textSecondary),
     );

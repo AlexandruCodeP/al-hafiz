@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../models/surah.dart';
 import '../theme/app_theme.dart';
 
 class AyahCard extends StatelessWidget {
   final Ayah ayah;
+  final int surahId;
   final bool isPlaying;
   final bool isFavorite;
   final bool isMastered;
@@ -20,6 +22,7 @@ class AyahCard extends StatelessWidget {
   const AyahCard({
     super.key,
     required this.ayah,
+    this.surahId = 0,
     this.isPlaying = false,
     this.isFavorite = false,
     this.isMastered = false,
@@ -44,28 +47,18 @@ class AyahCard extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       decoration: BoxDecoration(
         color: isPlaying
-            ? AppColors.accent.withValues(alpha: 0.08)
-            : isMastered 
-                ? AppColors.primary.withValues(alpha: 0.03)
-                : isDark ? AppColors.surface : Colors.white,
+            ? (isDark ? AppColors.accent.withValues(alpha: 0.1) : AppColors.gradientStart.withValues(alpha: 0.5))
+            : isDark ? AppColors.surface : Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isPlaying 
-              ? AppColors.accent.withValues(alpha: 0.5) 
-              : isMastered 
-                  ? AppColors.primary.withValues(alpha: 0.3)
-                  : AppColors.divider.withValues(alpha: isDark ? 1.0 : 0.1),
+          color: isPlaying
+              ? AppColors.accent.withValues(alpha: 0.4)
+              : isDark ? AppColors.divider.withValues(alpha: 0.5) : AppColors.dividerLight,
           width: isPlaying ? 1.5 : 0.5,
         ),
         boxShadow: isPlaying
-            ? [
-                BoxShadow(
-                  color: AppColors.accent.withValues(alpha: 0.15),
-                  blurRadius: 20,
-                  spreadRadius: 2,
-                ),
-              ]
-            : null,
+            ? [BoxShadow(color: AppColors.accent.withValues(alpha: 0.1), blurRadius: 16, spreadRadius: 1)]
+            : [BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.04), blurRadius: 8, offset: const Offset(0, 2))],
       ),
       child: Material(
         color: Colors.transparent,
@@ -78,96 +71,90 @@ class AyahCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // ── Header row: verse badge + action icons ──
                 Row(
                   children: [
-                    Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: isPlaying
-                                ? AppColors.accent.withValues(alpha: 0.2)
-                                : isMastered 
-                                    ? AppColors.primary.withValues(alpha: 0.2)
-                                    : isDark ? AppColors.surfaceLight : Colors.grey[100],
-                            border: Border.all(
-                              color: isPlaying 
-                                  ? AppColors.accent 
-                                  : isMastered 
-                                      ? AppColors.primary 
-                                      : AppColors.divider.withValues(alpha: 0.2),
-                              width: 1,
-                            ),
-                          ),
-                          child: Center(
-                            child: Text(
-                              '${ayah.id}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: isPlaying 
-                                    ? AppColors.accent 
-                                    : isMastered 
-                                        ? AppColors.primaryLight 
-                                        : isDark ? AppColors.textSecondary : Colors.grey[600],
-                              ),
-                            ),
-                          ),
+                    // Verse number badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: isPlaying
+                            ? AppColors.accent.withValues(alpha: 0.2)
+                            : isDark ? AppColors.surfaceLight : const Color(0xFFF5F0E8),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isPlaying
+                              ? AppColors.accent.withValues(alpha: 0.4)
+                              : isDark ? AppColors.divider : const Color(0xFFE5DDD2),
+                          width: 0.5,
                         ),
-                        if (isMastered)
-                          Positioned(
-                            right: -2,
-                            top: -2,
-                            child: Container(
-                              padding: const EdgeInsets.all(2),
-                              decoration: const BoxDecoration(
-                                color: AppColors.primary,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(Icons.check, color: Colors.white, size: 8),
-                            ),
-                          ),
-                      ],
+                      ),
+                      child: Text(
+                        '$surahId:${ayah.id}',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: isPlaying
+                              ? AppColors.accent
+                              : isDark ? AppColors.textSecondary : AppColors.textSecondaryLight,
+                        ),
+                      ),
                     ),
+                    if (isMastered) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.check, color: AppColors.primary, size: 12),
+                      ),
+                    ],
                     const Spacer(),
-                    if (onMasteredTap != null)
-                      IconButton(
-                        icon: Icon(
-                          isMastered ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
-                          color: isMastered ? AppColors.primary : AppColors.textSecondary,
-                          size: 20,
-                        ),
-                        onPressed: onMasteredTap,
-                        visualDensity: VisualDensity.compact,
-                      ),
-                    if (onFavoriteTap != null)
-                      IconButton(
-                        icon: Icon(
-                          isFavorite ? Icons.bookmark : Icons.bookmark_outline,
-                          color: isFavorite ? AppColors.accent : AppColors.textSecondary,
-                          size: 20,
-                        ),
-                        onPressed: onFavoriteTap,
-                        visualDensity: VisualDensity.compact,
-                      ),
+                    // Action icons row
+                    _ActionIcon(
+                      icon: Icons.play_circle_outline_rounded,
+                      isActive: isPlaying,
+                      activeColor: AppColors.accent,
+                      onTap: onTap,
+                      isDark: isDark,
+                    ),
+                    const SizedBox(width: 4),
+                    _ActionIcon(
+                      icon: isFavorite ? Icons.bookmark_rounded : Icons.bookmark_outline_rounded,
+                      isActive: isFavorite,
+                      activeColor: AppColors.accent,
+                      onTap: onFavoriteTap,
+                      isDark: isDark,
+                    ),
+                    const SizedBox(width: 4),
+                    _ActionIcon(
+                      icon: isMastered ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                      isActive: isMastered,
+                      activeColor: AppColors.primary,
+                      onTap: onMasteredTap,
+                      isDark: isDark,
+                    ),
                   ],
                 ),
+
+                // ── Arabic text ──
                 if (showArabic) ...[
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 16),
                   Text(
                     hideText ? '...' : ayah.text,
                     textAlign: TextAlign.right,
                     textDirection: TextDirection.rtl,
                     style: AppTheme.arabicTextStyle(textSizeMultiplier).copyWith(
                       color: isPlaying
-                          ? (isDark ? AppColors.accentLight : Colors.black87)
-                          : (isDark ? AppColors.textArabic : Colors.black87),
+                          ? (isDark ? AppColors.accentLight : const Color(0xFF2C1F0E))
+                          : (isDark ? AppColors.textArabic : const Color(0xFF2C1F0E)),
                     ),
                   ),
                 ],
+
+                // ── Phonetic ──
                 if (!hideText && showPhonetic && ayah.phonetic != null) ...[
                   const SizedBox(height: 8),
                   Text(
@@ -175,6 +162,8 @@ class AyahCard extends StatelessWidget {
                     style: AppTheme.phoneticTextStyle(textSizeMultiplier),
                   ),
                 ],
+
+                // ── Translation ──
                 if (!hideText && showTranslation && ayah.translation != null) ...[
                   const SizedBox(height: 8),
                   Text(
@@ -185,6 +174,37 @@ class AyahCard extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionIcon extends StatelessWidget {
+  final IconData icon;
+  final bool isActive;
+  final Color activeColor;
+  final VoidCallback? onTap;
+  final bool isDark;
+
+  const _ActionIcon({
+    required this.icon,
+    required this.isActive,
+    required this.activeColor,
+    required this.isDark,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(4),
+        child: Icon(
+          icon,
+          size: 20,
+          color: isActive ? activeColor : (isDark ? AppColors.textSecondary : AppColors.textSecondaryLight),
         ),
       ),
     );

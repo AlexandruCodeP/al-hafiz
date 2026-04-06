@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:provider/provider.dart';
 import '../models/surah.dart';
@@ -172,10 +173,14 @@ class _ReaderScreenState extends State<ReaderScreen>
           onNotification: _onScrollNotification,
           child: ListView.builder(
             controller: _scrollController,
-            padding: const EdgeInsets.only(top: 8, bottom: 80),
-            itemCount: _surah.verses.length,
+            padding: const EdgeInsets.only(top: 0, bottom: 80),
+            itemCount: _surah.verses.length + 1,
             itemBuilder: (context, index) {
-              final ayah = _surah.verses[index];
+              // ── Surah header card ──
+              if (index == 0) {
+                return _SurahHeaderCard(surah: widget.surah);
+              }
+              final ayah = _surah.verses[index - 1];
               final isPlaying = audio.currentSurahId == widget.surah.id &&
                   audio.currentAyahId == ayah.id;
               _ayahKeys.putIfAbsent(ayah.id, () => GlobalKey());
@@ -186,7 +191,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                 _lastScrolledToAyah = ayah.id;
                 Future.delayed(const Duration(milliseconds: 150), () {
                   if (mounted && _autoScrollEnabled) {
-                    _scrollToAyah(index);
+                    _scrollToAyah(index - 1);
                   }
                 });
               }
@@ -197,6 +202,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                 isPlayingAyah: isPlaying,
                 child: AyahCard(
                   ayah: ayah,
+                  surahId: widget.surah.id,
                   isPlaying: isPlaying,
                   isFavorite: storage.isFavorite(widget.surah.id, ayah.id),
                   isMastered: storage.isMastered(widget.surah.id, ayah.id),
@@ -752,6 +758,72 @@ class _TafsirSheetState extends State<_TafsirSheet> {
                     ),
         ),
       ],
+    );
+  }
+}
+
+class _SurahHeaderCard extends StatelessWidget {
+  final Surah surah;
+
+  const _SurahHeaderCard({required this.surah});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: isDark
+              ? [AppColors.gradientDarkStart, AppColors.gradientDarkEnd]
+              : [AppColors.gradientStart, AppColors.gradientEnd],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: (isDark ? Colors.black : AppColors.accent).withValues(alpha: 0.15),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Text(
+            surah.transliteration,
+            style: GoogleFonts.poppins(
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              color: isDark ? AppColors.accent : const Color(0xFF5C3D1A),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${surah.type == "Meccan" ? "Mecquoise" : "Medinoise"} · ${surah.totalVerses} versets',
+            style: GoogleFonts.poppins(
+              fontSize: 13,
+              color: isDark ? AppColors.textSecondary : const Color(0xFF8C6D4F),
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Bismillah (skip for Surah At-Tawbah = 9)
+          if (surah.id != 9)
+            Text(
+              'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ',
+              style: TextStyle(
+                fontFamily: 'Scheherazade',
+                fontSize: 24,
+                height: 1.6,
+                color: isDark ? AppColors.textArabic : const Color(0xFF3D2B14),
+              ),
+              textDirection: TextDirection.rtl,
+            ),
+        ],
+      ),
     );
   }
 }
