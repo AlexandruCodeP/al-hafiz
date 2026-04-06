@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:just_audio_background/just_audio_background.dart';
 import 'models/reciter.dart';
 import 'services/audio_service.dart';
 import 'services/hifz_engine.dart';
@@ -15,16 +14,6 @@ import 'theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  try {
-    await JustAudioBackground.init(
-      androidNotificationChannelId: 'com.alhafiz.audio',
-      androidNotificationChannelName: 'Al-Hafiz Audio',
-      androidNotificationOngoing: true,
-    );
-  } catch (e) {
-    debugPrint('JustAudioBackground.init failed: $e');
-  }
 
   final prefs = await SharedPreferences.getInstance();
   final storageService = StorageService(prefs);

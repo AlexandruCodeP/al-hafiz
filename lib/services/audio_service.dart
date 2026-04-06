@@ -1,5 +1,4 @@
 import 'package:just_audio/just_audio.dart';
-import 'package:just_audio_background/just_audio_background.dart';
 import 'package:flutter/foundation.dart';
 import '../models/reciter.dart';
 
@@ -131,17 +130,7 @@ class AudioService extends ChangeNotifier {
         notifyListeners();
 
         final url = _buildAudioUrl(surahId, ayahId);
-        await _player.setAudioSource(
-          AudioSource.uri(
-            Uri.parse(url),
-            tag: MediaItem(
-              id: '$surahId:$ayahId',
-              title: 'Verset $ayahId',
-              artist: _currentReciter.displayName,
-              album: 'Al-Hafiz',
-            ),
-          ),
-        );
+        await _player.setUrl(url);
         _isLoading = false;
         notifyListeners();
         await _player.play();
@@ -168,15 +157,7 @@ class AudioService extends ChangeNotifier {
 
       final sources = <AudioSource>[];
       for (int i = 1; i <= _currentSurahTotalVerses; i++) {
-        sources.add(AudioSource.uri(
-          Uri.parse(_buildAudioUrl(surahId, i)),
-          tag: MediaItem(
-            id: '$surahId:$i',
-            title: 'Verset $i',
-            artist: _currentReciter.displayName,
-            album: 'Al-Hafiz',
-          ),
-        ));
+        sources.add(AudioSource.uri(Uri.parse(_buildAudioUrl(surahId, i))));
       }
 
       _playlist = ConcatenatingAudioSource(children: sources);
