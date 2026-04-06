@@ -16,11 +16,15 @@ import 'theme/app_theme.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await JustAudioBackground.init(
-    androidNotificationChannelId: 'com.alhafiz.audio',
-    androidNotificationChannelName: 'Al-Hafiz Audio',
-    androidNotificationOngoing: true,
-  );
+  try {
+    await JustAudioBackground.init(
+      androidNotificationChannelId: 'com.alhafiz.audio',
+      androidNotificationChannelName: 'Al-Hafiz Audio',
+      androidNotificationOngoing: true,
+    );
+  } catch (e) {
+    debugPrint('JustAudioBackground.init failed: $e');
+  }
 
   final prefs = await SharedPreferences.getInstance();
   final storageService = StorageService(prefs);
