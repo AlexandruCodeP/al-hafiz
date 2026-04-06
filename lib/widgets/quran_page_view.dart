@@ -336,15 +336,19 @@ class _SurahHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.primary, AppColors.primaryLight],
+        gradient: LinearGradient(
+          colors: isDark
+              ? [AppColors.gradientDarkStart, AppColors.gradientDarkEnd]
+              : [AppColors.gradientStart, AppColors.gradientEnd],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.3),
+            color: (isDark ? Colors.black : AppColors.accent).withValues(alpha: 0.15),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -354,30 +358,30 @@ class _SurahHeader extends StatelessWidget {
         children: [
           Text(
             surah.name,
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: 'Scheherazade',
               fontSize: 28,
-              color: Colors.white,
+              color: isDark ? AppColors.accent : const Color(0xFF5C3D1A),
             ),
           ),
           const SizedBox(height: 4),
           Text(
-            surah.transliteration,
+            '${surah.transliteration} · ${surah.totalVerses} versets',
             style: GoogleFonts.poppins(
               fontSize: 13,
-              color: Colors.white70,
+              color: isDark ? AppColors.textSecondary : const Color(0xFF8C6D4F),
               fontWeight: FontWeight.w500,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           // Bismillah (except for At-Tawbah)
           if (surah.id != 9)
             Text(
               'بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ',
               style: TextStyle(
                 fontFamily: 'Scheherazade',
-                fontSize: 20,
-                color: Colors.white.withValues(alpha: 0.9),
+                fontSize: 22,
+                color: isDark ? AppColors.textArabic : const Color(0xFF3D2B14),
               ),
             ),
         ],

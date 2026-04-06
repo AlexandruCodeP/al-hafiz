@@ -14,6 +14,7 @@ import '../widgets/note_dialog.dart';
 import '../widgets/focus_mode.dart';
 import '../widgets/paper_grain.dart';
 import '../widgets/mushaf_page_view.dart';
+import '../widgets/quran_page_view.dart';
 import '../models/reciter.dart';
 import '../services/quran_service.dart';
 
@@ -33,7 +34,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   bool _focusModeActive = false;
   bool _hideText = false;
   bool _autoScrollEnabled = true;
-  bool _pageMode = false;
+  bool _pageMode = true;
   final ScrollController _scrollController = ScrollController();
   late AnimationController _entryAnim;
   AudioService? _audioService;
@@ -147,22 +148,17 @@ class _ReaderScreenState extends State<ReaderScreen>
   }
 
   Widget _buildPageMode(AudioService audio) {
-    final pageRange = QuranService.instance.getSurahPageRange(widget.surah.id);
-    if (pageRange == null) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    final (startPage, endPage) = pageRange;
+    final currentAyah = audio.currentSurahId == widget.surah.id
+        ? audio.currentAyahId
+        : null;
 
-    // If an ayah is playing, find its page
-    int initialPage = startPage;
-    if (audio.currentSurahId == widget.surah.id && audio.currentAyahId != null) {
-      initialPage = QuranService.instance.getPageNumber(widget.surah.id, audio.currentAyahId!) ?? startPage;
-    }
-
-    return MushafPageView(
-      initialPage: initialPage,
-      startPage: startPage,
-      endPage: endPage,
+    return QuranPageView(
+      surah: _surah,
+      currentPlayingAyahId: currentAyah,
+      onAyahTap: (ayahId) {
+        audio.playAyah(widget.surah.id, ayahId, widget.surah.totalVerses);
+        context.read<StorageService>().saveLastPosition(widget.surah.id, ayahId);
+      },
     );
   }
 
