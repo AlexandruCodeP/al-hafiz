@@ -234,7 +234,8 @@ class _SurahFavoriteGroup extends StatelessWidget {
           const Divider(height: 1, color: AppColors.divider),
           // Favorite items
           ...favorites.map((fav) {
-            final ayah = surah.verses.firstWhere((a) => a.id == fav.ayahId);
+            final ayah = surah.verses.where((a) => a.id == fav.ayahId).firstOrNull;
+            if (ayah == null) return const SizedBox.shrink();
             return Dismissible(
               key: ValueKey('${fav.surahId}:${fav.ayahId}'),
               direction: DismissDirection.endToStart,
