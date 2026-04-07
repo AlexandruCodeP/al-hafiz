@@ -220,10 +220,66 @@ class AudioService extends ChangeNotifier {
     }
   }
 
+  /// Load an ayah's audio without starting playback.
+  /// Returns true if the audio source is ready.
+  Future<bool> _loadAyahSilently(int surahId, int ayahId, [int? totalVerses]) async {
+    try {
+      if (totalVerses != null) _currentSurahTotalVerses = totalVerses;
+      _currentSurahId = surahId;
+      _currentAyahId = ayahId;
+      clearClip();
+
+      if (isPerSurahSource) {
+        _playlist = null;
+        _playlistSurahId = null;
+        _isLoading = true;
+        notifyListeners();
+
+        final url = _buildAudioUrl(surahId, ayahId);
+        await _player.setUrl(url);
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+
+      // Per-ayah: reuse existing playlist if same surah
+      if (_playlistSurahId == surahId && _playlist != null) {
+        final index = ayahId - 1;
+        // Pause first, then seek to the track start
+        if (_isPlaying) await _player.pause();
+        await _player.seek(Duration.zero, index: index);
+        notifyListeners();
+        return true;
+      }
+
+      // Build new playlist
+      _isLoading = true;
+      notifyListeners();
+
+      final sources = <AudioSource>[];
+      for (int i = 1; i <= _currentSurahTotalVerses; i++) {
+        sources.add(AudioSource.uri(Uri.parse(_buildAudioUrl(surahId, i))));
+      }
+
+      _playlist = ConcatenatingAudioSource(children: sources);
+      _playlistSurahId = surahId;
+
+      await _player.setAudioSource(_playlist!, initialIndex: ayahId - 1);
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _isLoading = false;
+      debugPrint('Error loading ayah: $e');
+      notifyListeners();
+      return false;
+    }
+  }
+
   /// Play only a segment of words within a verse.
   ///
-  /// Estimates word-level timing by proportional character length,
-  /// then uses A-B repeat to loop just that portion.
+  /// Loads the ayah silently, estimates word-level timing proportionally,
+  /// sets an A-B clip for the segment, then starts playback from the clip start.
   Future<void> playSegment({
     required int surahId,
     required int ayahId,
@@ -232,26 +288,37 @@ class AudioService extends ChangeNotifier {
     required List<String> allWords,
     int? totalVerses,
   }) async {
-    // First, make sure the ayah is loaded
-    await playAyah(surahId, ayahId, totalVerses);
+    // Stop current playback and load the ayah without playing
+    if (_isPlaying) await _player.pause();
 
-    // Wait for the duration to be available
-    Duration? dur = _duration;
+    final loaded = await _loadAyahSilently(surahId, ayahId, totalVerses);
+    if (!loaded) return;
+
+    // Wait for the duration to become available (track must buffer)
+    Duration dur = _duration;
     if (dur == Duration.zero) {
-      // Listen for the first non-zero duration
-      dur = await _player.durationStream
+      final d = await _player.durationStream
           .where((d) => d != null && d > Duration.zero)
           .first
-          .timeout(const Duration(seconds: 5), onTimeout: () => null);
+          .timeout(const Duration(seconds: 8), onTimeout: () => null);
+      if (d == null || d == Duration.zero) {
+        // Fallback: just play the whole ayah
+        await _player.play();
+        return;
+      }
+      dur = d;
     }
 
-    if (dur == null || dur == Duration.zero) return;
-
-    // Estimate word timings proportionally by character count
-    // (Arabic diacritics are lightweight, base chars carry the weight)
-    final wordLengths = allWords.map((w) => w.runes.length.toDouble()).toList();
+    // Estimate word timings proportionally by character count.
+    // Strip diacritics (tashkeel) so only base letters count —
+    // this gives a better timing estimate for Arabic recitation.
+    final strippedWords = allWords.map((w) => _stripTashkeel(w)).toList();
+    final wordLengths = strippedWords.map((w) => w.runes.length.toDouble()).toList();
     final totalChars = wordLengths.fold(0.0, (a, b) => a + b);
-    if (totalChars == 0) return;
+    if (totalChars == 0) {
+      await _player.play();
+      return;
+    }
 
     final totalMs = dur.inMilliseconds.toDouble();
     double cumulMs = 0;
@@ -264,16 +331,28 @@ class AudioService extends ChangeNotifier {
       wordEnds.add(cumulMs);
     }
 
-    // Add a small margin (100ms) before/after for smoother clipping
-    final clipStartMs = (wordStarts[startWordIndex] - 100).clamp(0, totalMs);
-    final clipEndMs = (wordEnds[endWordIndex] + 100).clamp(0, totalMs);
+    // Clamp indices to valid range
+    final si = startWordIndex.clamp(0, wordStarts.length - 1);
+    final ei = endWordIndex.clamp(0, wordEnds.length - 1);
+
+    // Small margin (150ms) before/after for smoother clipping
+    final clipStartMs = (wordStarts[si] - 150).clamp(0.0, totalMs);
+    final clipEndMs = (wordEnds[ei] + 150).clamp(0.0, totalMs);
 
     final clipStart = Duration(milliseconds: clipStartMs.round());
     final clipEnd = Duration(milliseconds: clipEndMs.round());
 
-    // Seek to clip start and set A-B repeat
-    await _player.seek(clipStart);
+    // Set clip, seek to start, then play
     setClip(clipStart, clipEnd);
+    await _player.seek(clipStart);
+    await _player.play();
+  }
+
+  /// Remove Arabic tashkeel (diacritics) to get base letter count.
+  static String _stripTashkeel(String text) {
+    // Unicode range for Arabic diacritics (tashkeel): 0x064B - 0x065F
+    // Also includes tatweel (0x0640) and superscript alef (0x0670)
+    return text.replaceAll(RegExp(r'[\u064B-\u065F\u0640\u0670]'), '');
   }
 
   Future<void> setLoopMode(LoopMode mode) async {
