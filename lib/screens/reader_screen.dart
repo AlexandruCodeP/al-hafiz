@@ -17,6 +17,7 @@ import '../widgets/quran_page_view.dart';
 import '../widgets/word_segment_selector.dart';
 import '../models/reciter.dart';
 import '../services/quran_service.dart';
+import '../services/word_timing_service.dart';
 
 class ReaderScreen extends StatefulWidget {
   final Surah surah;
@@ -48,6 +49,9 @@ class _ReaderScreenState extends State<ReaderScreen>
   int? _selectedAyahId;
   bool _segmentHideMode = false;
 
+  // Word-level audio tracking for Mushaf view
+  Map<int, VerseTimings>? _wordTimings;
+
   @override
   void initState() {
     super.initState();
@@ -60,6 +64,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     _loadEnrichedSurah();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadWordTimings();
       _audioService = context.read<AudioService>();
       final hifz = context.read<HifzEngine>();
 
@@ -87,6 +92,17 @@ class _ReaderScreenState extends State<ReaderScreen>
         _surah = enriched;
         _isLoadingExtra = false;
       });
+    }
+  }
+
+  Future<void> _loadWordTimings() async {
+    final reciterId = context.read<AudioService>().currentReciter.id;
+    final timings = await WordTimingService.instance.fetchTimings(
+      widget.surah.id,
+      reciterId,
+    );
+    if (mounted && timings != null) {
+      setState(() => _wordTimings = timings);
     }
   }
 
@@ -157,9 +173,24 @@ class _ReaderScreenState extends State<ReaderScreen>
         ? audio.currentAyahId
         : null;
 
+    // Compute current word index from audio position + timing data
+    int? currentWordIdx;
+    if (currentAyah != null && _wordTimings != null && audio.isPlaying) {
+      final verseTiming = _wordTimings![currentAyah];
+      if (verseTiming != null && audio.duration.inMilliseconds > 0) {
+        currentWordIdx = WordTimingService.getCurrentWordIndex(
+          verseTiming,
+          audio.position,
+          audio.duration,
+        );
+      }
+    }
+
     return QuranPageView(
       surah: _surah,
       currentPlayingAyahId: currentAyah,
+      currentWordIndex: currentWordIdx,
+      wordTimings: _wordTimings,
       onAyahTap: (ayahId) {
         audio.playAyah(widget.surah.id, ayahId, widget.surah.totalVerses);
         context.read<StorageService>().saveLastPosition(widget.surah.id, ayahId);
@@ -548,6 +579,8 @@ class _ReaderScreenState extends State<ReaderScreen>
                         onTap: () {
                           audio.setReciter(reciter);
                           context.read<StorageService>().setReciterId(reciter.id);
+                          // Reload word timings for the new reciter
+                          _loadWordTimings();
                           Navigator.pop(ctx);
                         },
                       );

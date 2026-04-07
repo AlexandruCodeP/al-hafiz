@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/surah.dart';
+import '../services/word_timing_service.dart';
 import '../theme/app_theme.dart';
 
 /// Displays a surah in traditional Mushaf page layout.
 /// Verses flow as continuous Arabic text, grouped by page.
+/// Supports word-level highlighting synchronized with audio playback.
 class QuranPageView extends StatefulWidget {
   final Surah surah;
   final int? currentPlayingAyahId;
+  final int? currentWordIndex;
   final int? initialPage;
+  final Map<int, VerseTimings>? wordTimings;
   final ValueChanged<int>? onPageChanged;
   final ValueChanged<int>? onAyahTap;
 
@@ -16,7 +20,9 @@ class QuranPageView extends StatefulWidget {
     super.key,
     required this.surah,
     this.currentPlayingAyahId,
+    this.currentWordIndex,
     this.initialPage,
+    this.wordTimings,
     this.onPageChanged,
     this.onAyahTap,
   });
@@ -55,7 +61,6 @@ class _QuranPageViewState extends State<QuranPageView> {
       initialIndex = _surahPages.indexOf(widget.initialPage!);
       if (initialIndex < 0) initialIndex = 0;
     } else if (widget.currentPlayingAyahId != null) {
-      // Find the page containing the playing ayah
       for (int i = 0; i < _surahPages.length; i++) {
         final verses = _pageVerses[_surahPages[i]]!;
         if (verses.any((a) => a.id == widget.currentPlayingAyahId)) {
@@ -145,6 +150,8 @@ class _QuranPageViewState extends State<QuranPageView> {
                 surah: widget.surah,
                 isFirstPage: isFirstPage,
                 currentPlayingAyahId: widget.currentPlayingAyahId,
+                currentWordIndex: widget.currentWordIndex,
+                wordTimings: widget.wordTimings,
                 isDark: isDark,
                 onAyahTap: widget.onAyahTap,
               );
@@ -158,7 +165,8 @@ class _QuranPageViewState extends State<QuranPageView> {
             color: isDark ? AppColors.surface : Colors.grey[50],
             border: Border(
               top: BorderSide(
-                color: (isDark ? AppColors.divider : AppColors.dividerLight).withValues(alpha: 0.5),
+                color: (isDark ? AppColors.divider : AppColors.dividerLight)
+                    .withValues(alpha: 0.5),
                 width: 0.5,
               ),
             ),
@@ -189,12 +197,16 @@ class _QuranPageViewState extends State<QuranPageView> {
                     decoration: BoxDecoration(
                       color: isSelected
                           ? AppColors.primary
-                          : isDark ? AppColors.surfaceLight : Colors.white,
+                          : isDark
+                              ? AppColors.surfaceLight
+                              : Colors.white,
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
                         color: isSelected
                             ? AppColors.primary
-                            : (isDark ? AppColors.divider : AppColors.dividerLight),
+                            : (isDark
+                                ? AppColors.divider
+                                : AppColors.dividerLight),
                         width: isSelected ? 1.5 : 0.5,
                       ),
                     ),
@@ -202,10 +214,13 @@ class _QuranPageViewState extends State<QuranPageView> {
                       '$pageNum',
                       style: GoogleFonts.poppins(
                         fontSize: 12,
-                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                        fontWeight:
+                            isSelected ? FontWeight.w700 : FontWeight.w500,
                         color: isSelected
                             ? Colors.white
-                            : isDark ? AppColors.textSecondary : AppColors.textSecondaryLight,
+                            : isDark
+                                ? AppColors.textSecondary
+                                : AppColors.textSecondaryLight,
                       ),
                     ),
                   ),
@@ -219,13 +234,18 @@ class _QuranPageViewState extends State<QuranPageView> {
   }
 }
 
-/// A single Mushaf page with flowing Arabic text
+// ─────────────────────────────────────────────────────────────────────────────
+// _MushafPage — single page with flowing Arabic text and word highlights
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _MushafPage extends StatelessWidget {
   final int pageNumber;
   final List<Ayah> verses;
   final Surah surah;
   final bool isFirstPage;
   final int? currentPlayingAyahId;
+  final int? currentWordIndex;
+  final Map<int, VerseTimings>? wordTimings;
   final bool isDark;
   final ValueChanged<int>? onAyahTap;
 
@@ -235,6 +255,8 @@ class _MushafPage extends StatelessWidget {
     required this.surah,
     required this.isFirstPage,
     this.currentPlayingAyahId,
+    this.currentWordIndex,
+    this.wordTimings,
     required this.isDark,
     this.onAyahTap,
   });
@@ -245,12 +267,11 @@ class _MushafPage extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       child: Column(
         children: [
-          // Surah header on first page
           if (isFirstPage) ...[
             _SurahHeader(surah: surah, isDark: isDark),
             const SizedBox(height: 16),
           ],
-          // Flowing Arabic text
+          // Flowing Arabic text with word-level highlighting
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
@@ -263,7 +284,8 @@ class _MushafPage extends StatelessWidget {
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.1 : 0.03),
+                  color: Colors.black
+                      .withValues(alpha: isDark ? 0.1 : 0.03),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -285,41 +307,91 @@ class _MushafPage extends StatelessWidget {
   List<InlineSpan> _buildVerseSpans(BuildContext context) {
     final spans = <InlineSpan>[];
 
-    for (final ayah in verses) {
-      final isPlaying = ayah.id == currentPlayingAyahId;
+    // Highlight colors
+    final verseHighlight = const Color(0xFF3B82F6).withValues(alpha: 0.10);
+    final wordHighlight = isDark
+        ? const Color(0xFF3B82F6).withValues(alpha: 0.35)
+        : const Color(0xFF3B82F6).withValues(alpha: 0.25);
 
-      // Verse text
-      spans.add(
-        WidgetSpan(
-          child: GestureDetector(
-            onTap: () => onAyahTap?.call(ayah.id),
-            child: Container(
-              padding: isPlaying
-                  ? const EdgeInsets.symmetric(horizontal: 4, vertical: 2)
-                  : null,
-              decoration: isPlaying
-                  ? BoxDecoration(
-                      color: AppColors.accent.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(6),
-                    )
-                  : null,
-              child: Text(
-                ayah.text,
-                style: TextStyle(
-                  fontFamily: 'Scheherazade',
-                  fontSize: 24,
-                  height: 2.2,
-                  color: isPlaying
-                      ? (isDark ? AppColors.accentLight : AppColors.primary)
-                      : (isDark ? AppColors.textArabic : Colors.black87),
+    for (final ayah in verses) {
+      final isPlayingVerse = ayah.id == currentPlayingAyahId;
+      final hasTimings = wordTimings != null && wordTimings!.containsKey(ayah.id);
+      final useWordHighlight = isPlayingVerse && hasTimings;
+
+      if (useWordHighlight) {
+        // ── Word-by-word rendering for the currently playing verse ──
+        final words = ayah.text.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+
+        for (int w = 0; w < words.length; w++) {
+          final isActiveWord = w == currentWordIndex;
+
+          spans.add(
+            WidgetSpan(
+              child: GestureDetector(
+                onTap: () => onAyahTap?.call(ayah.id),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOut,
+                  padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isActiveWord ? wordHighlight : verseHighlight,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    words[w],
+                    style: TextStyle(
+                      fontFamily: 'Scheherazade',
+                      fontSize: 24,
+                      height: 2.2,
+                      color: isActiveWord
+                          ? (isDark ? Colors.white : const Color(0xFF1A3A5C))
+                          : (isDark ? AppColors.textArabic : Colors.black87),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+
+          // Space between words
+          if (w < words.length - 1) {
+            spans.add(const TextSpan(text: ' '));
+          }
+        }
+      } else {
+        // ── Single block for non-playing verses (or no timing data) ──
+        spans.add(
+          WidgetSpan(
+            child: GestureDetector(
+              onTap: () => onAyahTap?.call(ayah.id),
+              child: Container(
+                padding: isPlayingVerse
+                    ? const EdgeInsets.symmetric(horizontal: 4, vertical: 2)
+                    : null,
+                decoration: isPlayingVerse
+                    ? BoxDecoration(
+                        color: verseHighlight,
+                        borderRadius: BorderRadius.circular(6),
+                      )
+                    : null,
+                child: Text(
+                  ayah.text,
+                  style: TextStyle(
+                    fontFamily: 'Scheherazade',
+                    fontSize: 24,
+                    height: 2.2,
+                    color: isPlayingVerse
+                        ? (isDark ? AppColors.accentLight : AppColors.primary)
+                        : (isDark ? AppColors.textArabic : Colors.black87),
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-      );
+        );
+      }
 
-      // Verse number marker (end sign)
+      // ── Verse number badge ──
       spans.add(
         WidgetSpan(
           alignment: PlaceholderAlignment.middle,
@@ -331,11 +403,13 @@ class _MushafPage extends StatelessWidget {
               height: 30,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: isPlaying
-                    ? AppColors.accent.withValues(alpha: 0.2)
+                color: isPlayingVerse
+                    ? const Color(0xFF3B82F6).withValues(alpha: 0.2)
                     : AppColors.primary.withValues(alpha: 0.1),
                 border: Border.all(
-                  color: isPlaying ? AppColors.accent : AppColors.primary.withValues(alpha: 0.3),
+                  color: isPlayingVerse
+                      ? const Color(0xFF3B82F6)
+                      : AppColors.primary.withValues(alpha: 0.3),
                   width: 1,
                 ),
               ),
@@ -345,7 +419,9 @@ class _MushafPage extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
-                    color: isPlaying ? AppColors.accent : AppColors.primary,
+                    color: isPlayingVerse
+                        ? const Color(0xFF3B82F6)
+                        : AppColors.primary,
                   ),
                 ),
               ),
@@ -354,13 +430,16 @@ class _MushafPage extends StatelessWidget {
         ),
       );
 
-      // Space between verses
       spans.add(const TextSpan(text: ' '));
     }
 
     return spans;
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _SurahHeader
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _SurahHeader extends StatelessWidget {
   final Surah surah;
@@ -384,7 +463,8 @@ class _SurahHeader extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: (isDark ? Colors.black : AppColors.accent).withValues(alpha: 0.15),
+            color: (isDark ? Colors.black : AppColors.accent)
+                .withValues(alpha: 0.15),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -410,7 +490,6 @@ class _SurahHeader extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          // Bismillah (except for At-Tawbah)
           if (surah.id != 9)
             Text(
               'بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ',
