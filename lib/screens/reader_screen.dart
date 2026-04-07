@@ -352,12 +352,54 @@ class _ReaderScreenState extends State<ReaderScreen>
                   children: [
                     const Text('Réglages d\'affichage', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 20),
-                    const Text('Taille du texte'),
-                    Slider(
-                      value: storage.textSizeMultiplier,
-                      min: 0.8, max: 1.8,
-                      onChanged: (v) => storage.setTextSizeMultiplier(v),
+
+                    // ── Taille du texte arabe ──
+                    Row(
+                      children: [
+                        Icon(Icons.text_fields_rounded, size: 18, color: Theme.of(context).hintColor),
+                        const SizedBox(width: 8),
+                        const Expanded(child: Text('Texte arabe')),
+                        Text(
+                          '${(storage.arabicTextSize * 100).round()}%',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.accent,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
                     ),
+                    Slider(
+                      value: storage.arabicTextSize,
+                      min: 0.7, max: 2.0,
+                      activeColor: AppColors.accent,
+                      onChanged: (v) => storage.setArabicTextSize(v),
+                    ),
+
+                    // ── Taille de la traduction ──
+                    Row(
+                      children: [
+                        Icon(Icons.translate_rounded, size: 18, color: Theme.of(context).hintColor),
+                        const SizedBox(width: 8),
+                        const Expanded(child: Text('Traduction')),
+                        Text(
+                          '${(storage.translationTextSize * 100).round()}%',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.primary,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Slider(
+                      value: storage.translationTextSize,
+                      min: 0.7, max: 2.0,
+                      activeColor: AppColors.primary,
+                      onChanged: (v) => storage.setTranslationTextSize(v),
+                    ),
+                    const SizedBox(height: 8),
+
                     SwitchListTile(
                       title: const Text('Arabe'),
                       value: storage.showArabic,
