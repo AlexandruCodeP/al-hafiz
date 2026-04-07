@@ -4,6 +4,7 @@ import '../services/quran_service.dart';
 import '../services/storage_service.dart';
 import '../models/surah.dart';
 import '../theme/app_theme.dart';
+import '../widgets/paper_grain.dart';
 import 'reader_screen.dart';
 
 class FavoritesScreen extends StatefulWidget {
@@ -60,7 +61,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
         ),
         automaticallyImplyLeading: false,
       ),
-      body: _isLoading
+      body: PaperGrainOverlay(
+        child: _isLoading
           ? const Center(
               child: CircularProgressIndicator(color: AppColors.primary),
             )
@@ -98,6 +100,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                     );
                   },
                 ),
+      ),
     );
   }
 }

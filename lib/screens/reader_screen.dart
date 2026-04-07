@@ -204,6 +204,8 @@ class _ReaderScreenState extends State<ReaderScreen>
                   isMastered: storage.isMastered(widget.surah.id, ayah.id),
                   hideText: _hideText && !isPlaying,
                   textSizeMultiplier: storage.textSizeMultiplier,
+                  arabicTextSize: storage.arabicTextSize,
+                  translationTextSize: storage.translationTextSize,
                   showArabic: storage.showArabic,
                   showTranslation: storage.showTranslation,
                   showPhonetic: storage.showPhonetic,
@@ -497,7 +499,7 @@ class _ReaderScreenState extends State<ReaderScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: Icon(storage.isBookmarked(widget.surah.id, ayah.id) ? Icons.bookmark : Icons.bookmark_border),
+              leading: Icon(storage.isBookmarked(widget.surah.id, ayah.id) ? Icons.bookmark_rounded : Icons.bookmark_outline_rounded, size: 22),
               title: const Text('Marque-page'),
               onTap: () {
                 storage.toggleBookmark(widget.surah.id, ayah.id);
@@ -505,7 +507,7 @@ class _ReaderScreenState extends State<ReaderScreen>
               },
             ),
             ListTile(
-              leading: const Icon(Icons.loop),
+              leading: const Icon(Icons.loop_rounded, size: 22),
               title: const Text('Boucler ce verset'),
               onTap: () {
                 context.read<AudioService>().setLoopMode(LoopMode.one);
@@ -529,7 +531,7 @@ class _ReaderScreenState extends State<ReaderScreen>
               },
             ),
             ListTile(
-              leading: const Icon(Icons.menu_book_outlined),
+              leading: const Icon(Icons.menu_book_rounded, size: 22),
               title: const Text('Tafsir (exégèse)'),
               onTap: () {
                 Navigator.pop(ctx);

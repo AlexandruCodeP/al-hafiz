@@ -5,6 +5,8 @@ import '../models/surah.dart';
 import '../services/quran_service.dart';
 import '../services/storage_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/paper_grain.dart';
+import '../widgets/tap_scale.dart';
 import 'reader_screen.dart';
 import 'search_screen.dart';
 
@@ -75,7 +77,8 @@ class _SurahListScreenState extends State<SurahListScreen>
     final topPadding = MediaQuery.of(context).padding.top;
 
     return Scaffold(
-      body: Column(
+      body: PaperGrainOverlay(
+        child: Column(
         children: [
           // ── Top section (safe area + title + search + quick access) ──
           Container(
@@ -142,6 +145,7 @@ class _SurahListScreenState extends State<SurahListScreen>
                   ),
           ),
         ],
+      ),
       ),
     );
   }
@@ -396,12 +400,10 @@ class _SurahTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          child: Container(
+      child: TapScale(
+        onTap: onTap,
+        scaleDown: 0.97,
+        child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
             decoration: BoxDecoration(
               color: isDark ? AppColors.surface : Colors.white,
@@ -475,7 +477,6 @@ class _SurahTile extends StatelessWidget {
               ],
             ),
           ),
-        ),
       ),
     );
   }

@@ -93,10 +93,25 @@ class _QuranPageViewState extends State<QuranPageView> {
     }
   }
 
+  final ScrollController _scrollBarController = ScrollController();
+
   @override
   void dispose() {
     _pageController.dispose();
+    _scrollBarController.dispose();
     super.dispose();
+  }
+
+  void _scrollToCurrentPageChip() {
+    const chipWidth = 54.0;
+    final targetOffset = (_currentPageIndex * chipWidth) - 120;
+    if (_scrollBarController.hasClients) {
+      _scrollBarController.animateTo(
+        targetOffset.clamp(0.0, _scrollBarController.position.maxScrollExtent),
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+    }
   }
 
   @override
@@ -116,6 +131,9 @@ class _QuranPageViewState extends State<QuranPageView> {
             onPageChanged: (index) {
               setState(() => _currentPageIndex = index);
               widget.onPageChanged?.call(_surahPages[index]);
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _scrollToCurrentPageChip();
+              });
             },
             itemBuilder: (context, index) {
               final pageNumber = _surahPages[index];
@@ -134,48 +152,67 @@ class _QuranPageViewState extends State<QuranPageView> {
             },
           ),
         ),
-        // Page indicator
+        // Horizontal page number scrollbar
         Container(
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.chevron_left_rounded, size: 28),
-                onPressed: _currentPageIndex > 0
-                    ? () => _pageController.previousPage(
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeInOut,
-                        )
-                    : null,
-                color: isDark ? AppColors.textSecondary : AppColors.textSecondaryLight,
+          height: 44,
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.surface : Colors.grey[50],
+            border: Border(
+              top: BorderSide(
+                color: (isDark ? AppColors.divider : AppColors.dividerLight).withValues(alpha: 0.5),
+                width: 0.5,
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                decoration: BoxDecoration(
-                  color: isDark ? AppColors.surface : Colors.grey[100],
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  'Page ${_surahPages[_currentPageIndex]}',
-                  style: GoogleFonts.poppins(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: isDark ? AppColors.textPrimary : AppColors.textPrimaryLight,
+            ),
+          ),
+          child: ListView.builder(
+            controller: _scrollBarController,
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            itemCount: _surahPages.length,
+            itemBuilder: (context, index) {
+              final pageNum = _surahPages[index];
+              final isSelected = index == _currentPageIndex;
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 3),
+                child: GestureDetector(
+                  onTap: () {
+                    _pageController.animateToPage(
+                      index,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                    );
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeInOut,
+                    width: 48,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? AppColors.primary
+                          : isDark ? AppColors.surfaceLight : Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: isSelected
+                            ? AppColors.primary
+                            : (isDark ? AppColors.divider : AppColors.dividerLight),
+                        width: isSelected ? 1.5 : 0.5,
+                      ),
+                    ),
+                    child: Text(
+                      '$pageNum',
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                        color: isSelected
+                            ? Colors.white
+                            : isDark ? AppColors.textSecondary : AppColors.textSecondaryLight,
+                      ),
+                    ),
                   ),
                 ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.chevron_right_rounded, size: 28),
-                onPressed: _currentPageIndex < _surahPages.length - 1
-                    ? () => _pageController.nextPage(
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeInOut,
-                        )
-                    : null,
-                color: isDark ? AppColors.textSecondary : AppColors.textSecondaryLight,
-              ),
-            ],
+              );
+            },
           ),
         ),
       ],

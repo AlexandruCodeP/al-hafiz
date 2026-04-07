@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import '../services/storage_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/paper_grain.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -22,7 +23,8 @@ class SettingsScreen extends StatelessWidget {
           style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
         ),
       ),
-      body: ListView(
+      body: PaperGrainOverlay(
+        child: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         children: [
           // Apparence section
@@ -76,6 +78,143 @@ class SettingsScreen extends StatelessWidget {
 
           const SizedBox(height: 24),
 
+          // Taille du texte section
+          Text(
+            'Taille du texte',
+            style: GoogleFonts.poppins(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: isDark ? AppColors.textSecondary : AppColors.textSecondaryLight,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            color: isDark ? AppColors.surfaceLight : AppColors.surfaceLightT,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(
+                color: isDark ? AppColors.divider : AppColors.dividerLight,
+                width: 0.5,
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.text_fields_rounded, size: 20,
+                          color: isDark ? AppColors.textSecondary : AppColors.textSecondaryLight),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Texte arabe',
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          color: isDark ? AppColors.textPrimary : AppColors.textPrimaryLight,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '${(storage.arabicTextSize * 100).round()}%',
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.accent,
+                        ),
+                      ),
+                    ],
+                  ),
+                  SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      activeTrackColor: AppColors.accent,
+                      inactiveTrackColor: AppColors.accent.withValues(alpha: 0.15),
+                      thumbColor: AppColors.accent,
+                      overlayColor: AppColors.accent.withValues(alpha: 0.1),
+                      trackHeight: 3,
+                    ),
+                    child: Slider(
+                      value: storage.arabicTextSize,
+                      min: 0.7,
+                      max: 2.0,
+                      onChanged: (v) => storage.setArabicTextSize(v),
+                    ),
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Aa', style: TextStyle(
+                        fontFamily: 'Scheherazade', fontSize: 12,
+                        color: isDark ? AppColors.textSecondary : AppColors.textSecondaryLight,
+                      )),
+                      Text('Aa', style: TextStyle(
+                        fontFamily: 'Scheherazade', fontSize: 20,
+                        color: isDark ? AppColors.textSecondary : AppColors.textSecondaryLight,
+                      )),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Divider(height: 1, color: isDark ? AppColors.divider : AppColors.dividerLight),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Icon(Icons.translate_rounded, size: 20,
+                          color: isDark ? AppColors.textSecondary : AppColors.textSecondaryLight),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Traduction',
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          color: isDark ? AppColors.textPrimary : AppColors.textPrimaryLight,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '${(storage.translationTextSize * 100).round()}%',
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      activeTrackColor: AppColors.primary,
+                      inactiveTrackColor: AppColors.primary.withValues(alpha: 0.15),
+                      thumbColor: AppColors.primary,
+                      overlayColor: AppColors.primary.withValues(alpha: 0.1),
+                      trackHeight: 3,
+                    ),
+                    child: Slider(
+                      value: storage.translationTextSize,
+                      min: 0.7,
+                      max: 2.0,
+                      onChanged: (v) => storage.setTranslationTextSize(v),
+                    ),
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Aa', style: GoogleFonts.poppins(
+                        fontSize: 10,
+                        color: isDark ? AppColors.textSecondary : AppColors.textSecondaryLight,
+                      )),
+                      Text('Aa', style: GoogleFonts.poppins(
+                        fontSize: 18,
+                        color: isDark ? AppColors.textSecondary : AppColors.textSecondaryLight,
+                      )),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
           // Sauvegarde section
           Text(
             'Sauvegarde et restauration',
@@ -114,7 +253,7 @@ class SettingsScreen extends StatelessWidget {
                       color: isDark ? AppColors.textSecondary : AppColors.textSecondaryLight,
                     ),
                   ),
-                  trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+                  trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textSecondary, size: 20),
                   onTap: () => _exportData(context, storage),
                 ),
                 Divider(
@@ -139,7 +278,7 @@ class SettingsScreen extends StatelessWidget {
                       color: isDark ? AppColors.textSecondary : AppColors.textSecondaryLight,
                     ),
                   ),
-                  trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+                  trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textSecondary, size: 20),
                   onTap: () => _importData(context, storage),
                 ),
               ],
@@ -211,6 +350,7 @@ class SettingsScreen extends StatelessWidget {
 
           const SizedBox(height: 32),
         ],
+        ),
       ),
     );
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/surah.dart';
 import '../theme/app_theme.dart';
+import 'tap_scale.dart';
 
 class AyahCard extends StatelessWidget {
   final Ayah ayah;
@@ -11,6 +12,8 @@ class AyahCard extends StatelessWidget {
   final bool isMastered;
   final bool hideText;
   final double textSizeMultiplier;
+  final double arabicTextSize;
+  final double translationTextSize;
   final bool showArabic;
   final bool showTranslation;
   final bool showPhonetic;
@@ -28,6 +31,8 @@ class AyahCard extends StatelessWidget {
     this.isMastered = false,
     this.hideText = false,
     this.textSizeMultiplier = 1.0,
+    this.arabicTextSize = 1.0,
+    this.translationTextSize = 1.0,
     this.showArabic = true,
     this.showTranslation = true,
     this.showPhonetic = true,
@@ -112,29 +117,29 @@ class AyahCard extends StatelessWidget {
                       ),
                     ],
                     const Spacer(),
-                    // Action icons row
-                    _ActionIcon(
+                    // Action icons with micro-animations
+                    AnimatedIconAction(
                       icon: Icons.play_circle_outline_rounded,
-                      isActive: isPlaying,
-                      activeColor: AppColors.accent,
+                      color: isPlaying ? AppColors.accent : (isDark ? AppColors.textSecondary : AppColors.textSecondaryLight),
+                      pressedColor: AppColors.accent,
+                      size: 20,
                       onTap: onTap,
-                      isDark: isDark,
                     ),
                     const SizedBox(width: 4),
-                    _ActionIcon(
+                    AnimatedIconAction(
                       icon: isFavorite ? Icons.bookmark_rounded : Icons.bookmark_outline_rounded,
-                      isActive: isFavorite,
-                      activeColor: AppColors.accent,
+                      color: isFavorite ? AppColors.accent : (isDark ? AppColors.textSecondary : AppColors.textSecondaryLight),
+                      pressedColor: AppColors.accentLight,
+                      size: 20,
                       onTap: onFavoriteTap,
-                      isDark: isDark,
                     ),
                     const SizedBox(width: 4),
-                    _ActionIcon(
+                    AnimatedIconAction(
                       icon: isMastered ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
-                      isActive: isMastered,
-                      activeColor: AppColors.primary,
+                      color: isMastered ? AppColors.primary : (isDark ? AppColors.textSecondary : AppColors.textSecondaryLight),
+                      pressedColor: AppColors.primaryLight,
+                      size: 20,
                       onTap: onMasteredTap,
-                      isDark: isDark,
                     ),
                   ],
                 ),
@@ -146,7 +151,7 @@ class AyahCard extends StatelessWidget {
                     hideText ? '...' : ayah.text,
                     textAlign: TextAlign.right,
                     textDirection: TextDirection.rtl,
-                    style: AppTheme.arabicTextStyle(textSizeMultiplier).copyWith(
+                    style: AppTheme.arabicTextStyle(textSizeMultiplier * arabicTextSize).copyWith(
                       color: isPlaying
                           ? (isDark ? AppColors.accentLight : const Color(0xFF2C1F0E))
                           : (isDark ? AppColors.textArabic : const Color(0xFF2C1F0E)),
@@ -168,7 +173,7 @@ class AyahCard extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     ayah.translation!,
-                    style: AppTheme.translationTextStyle(textSizeMultiplier, Theme.of(context).brightness),
+                    style: AppTheme.translationTextStyle(textSizeMultiplier * translationTextSize, Theme.of(context).brightness),
                   ),
                 ],
               ],
@@ -180,33 +185,3 @@ class AyahCard extends StatelessWidget {
   }
 }
 
-class _ActionIcon extends StatelessWidget {
-  final IconData icon;
-  final bool isActive;
-  final Color activeColor;
-  final VoidCallback? onTap;
-  final bool isDark;
-
-  const _ActionIcon({
-    required this.icon,
-    required this.isActive,
-    required this.activeColor,
-    required this.isDark,
-    this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.all(4),
-        child: Icon(
-          icon,
-          size: 20,
-          color: isActive ? activeColor : (isDark ? AppColors.textSecondary : AppColors.textSecondaryLight),
-        ),
-      ),
-    );
-  }
-}

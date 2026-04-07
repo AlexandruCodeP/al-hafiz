@@ -35,6 +35,8 @@ class StorageService extends ChangeNotifier {
 
   // Settings keys
   static const _textSizeKey = 'text_size';
+  static const _arabicTextSizeKey = 'arabic_text_size';
+  static const _translationTextSizeKey = 'translation_text_size';
   static const _themeModeKey = 'theme_mode';
   static const _showArabicKey = 'show_arabic';
   static const _showTranslationKey = 'show_translation';
@@ -199,6 +201,18 @@ class StorageService extends ChangeNotifier {
     notifyListeners();
   }
 
+  double get arabicTextSize => _prefs.getDouble(_arabicTextSizeKey) ?? 1.0;
+  Future<void> setArabicTextSize(double value) async {
+    await _prefs.setDouble(_arabicTextSizeKey, value);
+    notifyListeners();
+  }
+
+  double get translationTextSize => _prefs.getDouble(_translationTextSizeKey) ?? 1.0;
+  Future<void> setTranslationTextSize(double value) async {
+    await _prefs.setDouble(_translationTextSizeKey, value);
+    notifyListeners();
+  }
+
   ThemeMode get themeMode {
     final mode = _prefs.getString(_themeModeKey);
     if (mode == 'light') return ThemeMode.light;
@@ -280,6 +294,8 @@ class StorageService extends ChangeNotifier {
       'recentSurahs': getRecentSurahs(),
       'settings': {
         'textSize': textSizeMultiplier,
+        'arabicTextSize': arabicTextSize,
+        'translationTextSize': translationTextSize,
         'themeMode': themeMode.name,
         'showArabic': showArabic,
         'showTranslation': showTranslation,
@@ -340,6 +356,8 @@ class StorageService extends ChangeNotifier {
     if (data['settings'] != null) {
       final s = data['settings'] as Map<String, dynamic>;
       if (s['textSize'] != null) await setTextSizeMultiplier((s['textSize'] as num).toDouble());
+      if (s['arabicTextSize'] != null) await setArabicTextSize((s['arabicTextSize'] as num).toDouble());
+      if (s['translationTextSize'] != null) await setTranslationTextSize((s['translationTextSize'] as num).toDouble());
       if (s['themeMode'] != null) {
         final mode = ThemeMode.values.firstWhere(
           (m) => m.name == s['themeMode'],
