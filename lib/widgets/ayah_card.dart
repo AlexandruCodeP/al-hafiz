@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/surah.dart';
 import '../theme/app_theme.dart';
 import 'tap_scale.dart';
+import 'word_segment_selector.dart';
 
 class AyahCard extends StatelessWidget {
   final Ayah ayah;
@@ -21,6 +22,8 @@ class AyahCard extends StatelessWidget {
   final VoidCallback? onLongPress;
   final VoidCallback? onFavoriteTap;
   final VoidCallback? onMasteredTap;
+  final ValueChanged<WordSegment?>? onSegmentChanged;
+  final bool segmentHideMode;
 
   const AyahCard({
     super.key,
@@ -40,6 +43,8 @@ class AyahCard extends StatelessWidget {
     this.onLongPress,
     this.onFavoriteTap,
     this.onMasteredTap,
+    this.onSegmentChanged,
+    this.segmentHideMode = false,
   });
 
   @override
@@ -144,19 +149,28 @@ class AyahCard extends StatelessWidget {
                   ],
                 ),
 
-                // ── Arabic text ──
+                // ── Arabic text with word segment selection ──
                 if (showArabic) ...[
                   const SizedBox(height: 16),
-                  Text(
-                    hideText ? '...' : ayah.text,
-                    textAlign: TextAlign.right,
-                    textDirection: TextDirection.rtl,
-                    style: AppTheme.arabicTextStyle(textSizeMultiplier * arabicTextSize).copyWith(
-                      color: isPlaying
-                          ? (isDark ? AppColors.accentLight : const Color(0xFF2C1F0E))
-                          : (isDark ? AppColors.textArabic : const Color(0xFF2C1F0E)),
+                  if (hideText)
+                    Text(
+                      '...',
+                      textAlign: TextAlign.right,
+                      textDirection: TextDirection.rtl,
+                      style: AppTheme.arabicTextStyle(textSizeMultiplier * arabicTextSize),
+                    )
+                  else
+                    WordSegmentSelector(
+                      text: ayah.text,
+                      style: AppTheme.arabicTextStyle(textSizeMultiplier * arabicTextSize).copyWith(
+                        color: isPlaying
+                            ? (isDark ? AppColors.accentLight : const Color(0xFF2C1F0E))
+                            : (isDark ? AppColors.textArabic : const Color(0xFF2C1F0E)),
+                      ),
+                      enabled: true,
+                      hideUnselected: segmentHideMode,
+                      onSelectionChanged: onSegmentChanged,
                     ),
-                  ),
                 ],
 
                 // ── Phonetic ──

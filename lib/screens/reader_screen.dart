@@ -13,8 +13,8 @@ import '../widgets/hifz_controls.dart';
 import '../widgets/note_dialog.dart';
 import '../widgets/focus_mode.dart';
 import '../widgets/paper_grain.dart';
-import '../widgets/mushaf_page_view.dart';
 import '../widgets/quran_page_view.dart';
+import '../widgets/word_segment_selector.dart';
 import '../models/reciter.dart';
 import '../services/quran_service.dart';
 
@@ -42,6 +42,11 @@ class _ReaderScreenState extends State<ReaderScreen>
   bool _isLoadingExtra = true;
   final Map<int, GlobalKey> _ayahKeys = {};
   int? _lastScrolledToAyah;
+
+  // Segment selection state
+  WordSegment? _selectedSegment;
+  int? _selectedAyahId;
+  bool _segmentHideMode = false;
 
   @override
   void initState() {
@@ -218,6 +223,14 @@ class _ReaderScreenState extends State<ReaderScreen>
                       storage.toggleFavorite(widget.surah.id, ayah.id),
                   onMasteredTap: () =>
                       storage.toggleMastered(widget.surah.id, ayah.id),
+                  segmentHideMode: _segmentHideMode && _selectedAyahId == ayah.id,
+                  onSegmentChanged: (segment) {
+                    setState(() {
+                      _selectedSegment = segment;
+                      _selectedAyahId = segment != null ? ayah.id : null;
+                      if (segment == null) _segmentHideMode = false;
+                    });
+                  },
                 ),
               );
             },
@@ -321,6 +334,36 @@ class _ReaderScreenState extends State<ReaderScreen>
                 onPressed: _jumpToCurrentVerse,
                 backgroundColor: AppColors.primary,
                 child: const Icon(Icons.vertical_align_center_rounded, color: Colors.white, size: 20),
+              ),
+            ),
+          // ── Segment action bar ──
+          if (_selectedSegment != null)
+            Positioned(
+              left: 20,
+              right: 20,
+              bottom: 100,
+              child: _SegmentActionBar(
+                segment: _selectedSegment!,
+                ayahId: _selectedAyahId!,
+                surahId: widget.surah.id,
+                totalVerses: widget.surah.totalVerses,
+                isHideMode: _segmentHideMode,
+                onLoop: () {
+                  // Play the ayah containing the segment
+                  final audio = context.read<AudioService>();
+                  audio.playAyah(widget.surah.id, _selectedAyahId!, widget.surah.totalVerses);
+                  audio.setLoopMode(LoopMode.one);
+                },
+                onHideToggle: () {
+                  setState(() => _segmentHideMode = !_segmentHideMode);
+                },
+                onClear: () {
+                  setState(() {
+                    _selectedSegment = null;
+                    _selectedAyahId = null;
+                    _segmentHideMode = false;
+                  });
+                },
               ),
             ),
         ],
@@ -649,6 +692,168 @@ class _MiniPlayerBar extends StatelessWidget {
               Icons.arrow_forward_ios_rounded,
               color: Colors.white70,
               size: 14,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// Segment Action Bar
+// ─────────────────────────────────────────────
+class _SegmentActionBar extends StatelessWidget {
+  final WordSegment segment;
+  final int ayahId;
+  final int surahId;
+  final int totalVerses;
+  final bool isHideMode;
+  final VoidCallback onLoop;
+  final VoidCallback onHideToggle;
+  final VoidCallback onClear;
+
+  const _SegmentActionBar({
+    required this.segment,
+    required this.ayahId,
+    required this.surahId,
+    required this.totalVerses,
+    required this.isHideMode,
+    required this.onLoop,
+    required this.onHideToggle,
+    required this.onClear,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Material(
+      elevation: 8,
+      borderRadius: BorderRadius.circular(16),
+      shadowColor: Colors.black.withValues(alpha: 0.2),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.surface : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: const Color(0xFF4A90D9).withValues(alpha: 0.3),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            // Segment info
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${segment.wordCount} mot${segment.wordCount > 1 ? 's' : ''} · Verset $ayahId',
+                    style: GoogleFonts.poppins(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? AppColors.textSecondary : AppColors.textSecondaryLight,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    segment.text,
+                    style: const TextStyle(
+                      fontFamily: 'Scheherazade',
+                      fontSize: 14,
+                      color: Color(0xFF4A90D9),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textDirection: TextDirection.rtl,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Loop button
+            _SegmentButton(
+              icon: Icons.loop_rounded,
+              label: 'Boucler',
+              color: AppColors.accent,
+              isDark: isDark,
+              onTap: onLoop,
+            ),
+            const SizedBox(width: 6),
+            // Hide/Reveal button
+            _SegmentButton(
+              icon: isHideMode ? Icons.visibility_rounded : Icons.visibility_off_rounded,
+              label: isHideMode ? 'Montrer' : 'Cacher',
+              color: const Color(0xFF4A90D9),
+              isDark: isDark,
+              onTap: onHideToggle,
+            ),
+            const SizedBox(width: 6),
+            // Clear button
+            GestureDetector(
+              onTap: onClear,
+              child: Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: (isDark ? AppColors.divider : AppColors.dividerLight).withValues(alpha: 0.5),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.close_rounded,
+                  size: 16,
+                  color: isDark ? AppColors.textSecondary : AppColors.textSecondaryLight,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SegmentButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final bool isDark;
+  final VoidCallback onTap;
+
+  const _SegmentButton({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.isDark,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: isDark ? 0.2 : 0.1),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withValues(alpha: 0.3), width: 0.5),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: color),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
             ),
           ],
         ),

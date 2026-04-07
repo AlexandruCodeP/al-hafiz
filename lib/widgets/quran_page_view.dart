@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/surah.dart';
-import '../services/quran_service.dart';
 import '../theme/app_theme.dart';
 
 /// Displays a surah in traditional Mushaf page layout.
