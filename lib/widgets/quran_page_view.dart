@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/surah.dart';
+import '../services/mushaf_data_service.dart';
 import '../services/word_timing_service.dart';
 import '../theme/app_theme.dart';
 
-/// Displays a surah in traditional Mushaf page layout.
-/// Verses flow as continuous Arabic text, grouped by page.
-/// Supports word-level highlighting synchronized with audio playback.
+/// Displays a surah in authentic Mushaf page layout.
+///
+/// Each page is fetched from the Quran.com API, rendering word-by-word
+/// in 15-line pages with justified text, decorative borders, and
+/// real-time word-level audio highlighting.
 class QuranPageView extends StatefulWidget {
   final Surah surah;
   final int? currentPlayingAyahId;
@@ -34,36 +37,33 @@ class QuranPageView extends StatefulWidget {
 class _QuranPageViewState extends State<QuranPageView> {
   late PageController _pageController;
   List<int> _surahPages = [];
-  Map<int, List<Ayah>> _pageVerses = {};
   int _currentPageIndex = 0;
+  final ScrollController _scrollBarController = ScrollController();
 
   @override
   void initState() {
     super.initState();
-    _buildPageData();
+    _buildPageList();
+    // Prefetch a few pages ahead
+    MushafDataService.instance.prefetch(_surahPages.take(5).toList());
   }
 
-  void _buildPageData() {
-    // Group verses by page number
-    final Map<int, List<Ayah>> grouped = {};
-    for (final ayah in widget.surah.verses) {
-      final page = ayah.pageNumber;
-      if (page == null) continue;
-      grouped.putIfAbsent(page, () => []).add(ayah);
+  void _buildPageList() {
+    final pages = <int>{};
+    for (final a in widget.surah.verses) {
+      if (a.pageNumber != null) pages.add(a.pageNumber!);
     }
+    _surahPages = pages.toList()..sort();
 
-    _surahPages = grouped.keys.toList()..sort();
-    _pageVerses = grouped;
-
-    // Find initial page index
     int initialIndex = 0;
     if (widget.initialPage != null) {
       initialIndex = _surahPages.indexOf(widget.initialPage!);
       if (initialIndex < 0) initialIndex = 0;
     } else if (widget.currentPlayingAyahId != null) {
       for (int i = 0; i < _surahPages.length; i++) {
-        final verses = _pageVerses[_surahPages[i]]!;
-        if (verses.any((a) => a.id == widget.currentPlayingAyahId)) {
+        final p = _surahPages[i];
+        if (widget.surah.verses
+            .any((a) => a.pageNumber == p && a.id == widget.currentPlayingAyahId)) {
           initialIndex = i;
           break;
         }
@@ -77,27 +77,22 @@ class _QuranPageViewState extends State<QuranPageView> {
   @override
   void didUpdateWidget(QuranPageView oldWidget) {
     super.didUpdateWidget(oldWidget);
-
-    // Auto-navigate to page of currently playing ayah
     if (widget.currentPlayingAyahId != null &&
         widget.currentPlayingAyahId != oldWidget.currentPlayingAyahId) {
       for (int i = 0; i < _surahPages.length; i++) {
-        final verses = _pageVerses[_surahPages[i]]!;
-        if (verses.any((a) => a.id == widget.currentPlayingAyahId)) {
+        if (widget.surah.verses.any((a) =>
+            a.pageNumber == _surahPages[i] &&
+            a.id == widget.currentPlayingAyahId)) {
           if (i != _currentPageIndex) {
-            _pageController.animateToPage(
-              i,
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeInOut,
-            );
+            _pageController.animateToPage(i,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut);
           }
           break;
         }
       }
     }
   }
-
-  final ScrollController _scrollBarController = ScrollController();
 
   @override
   void dispose() {
@@ -106,12 +101,12 @@ class _QuranPageViewState extends State<QuranPageView> {
     super.dispose();
   }
 
-  void _scrollToCurrentPageChip() {
-    const chipWidth = 54.0;
-    final targetOffset = (_currentPageIndex * chipWidth) - 120;
+  void _scrollToChip() {
+    const w = 54.0;
+    final offset = (_currentPageIndex * w) - 120;
     if (_scrollBarController.hasClients) {
       _scrollBarController.animateTo(
-        targetOffset.clamp(0.0, _scrollBarController.position.maxScrollExtent),
+        offset.clamp(0.0, _scrollBarController.position.maxScrollExtent),
         duration: const Duration(milliseconds: 250),
         curve: Curves.easeOut,
       );
@@ -128,37 +123,35 @@ class _QuranPageViewState extends State<QuranPageView> {
 
     return Column(
       children: [
+        // ── Page area ──
         Expanded(
           child: PageView.builder(
             controller: _pageController,
             itemCount: _surahPages.length,
-            onPageChanged: (index) {
-              setState(() => _currentPageIndex = index);
-              widget.onPageChanged?.call(_surahPages[index]);
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                _scrollToCurrentPageChip();
-              });
+            onPageChanged: (i) {
+              setState(() => _currentPageIndex = i);
+              widget.onPageChanged?.call(_surahPages[i]);
+              // Prefetch next pages
+              final next = _surahPages.skip(i + 1).take(3).toList();
+              MushafDataService.instance.prefetch(next);
+              WidgetsBinding.instance
+                  .addPostFrameCallback((_) => _scrollToChip());
             },
-            itemBuilder: (context, index) {
-              final pageNumber = _surahPages[index];
-              final verses = _pageVerses[pageNumber]!;
-              final isFirstPage = index == 0;
-
+            itemBuilder: (_, i) {
               return _MushafPage(
-                pageNumber: pageNumber,
-                verses: verses,
+                pageNumber: _surahPages[i],
                 surah: widget.surah,
-                isFirstPage: isFirstPage,
+                isFirstPage: i == 0,
                 currentPlayingAyahId: widget.currentPlayingAyahId,
                 currentWordIndex: widget.currentWordIndex,
-                wordTimings: widget.wordTimings,
                 isDark: isDark,
                 onAyahTap: widget.onAyahTap,
               );
             },
           ),
         ),
-        // Horizontal page number scrollbar
+
+        // ── Page number bar ──
         Container(
           height: 44,
           decoration: BoxDecoration(
@@ -176,47 +169,41 @@ class _QuranPageViewState extends State<QuranPageView> {
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             itemCount: _surahPages.length,
-            itemBuilder: (context, index) {
-              final pageNum = _surahPages[index];
-              final isSelected = index == _currentPageIndex;
+            itemBuilder: (_, i) {
+              final num = _surahPages[i];
+              final sel = i == _currentPageIndex;
               return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 3),
                 child: GestureDetector(
-                  onTap: () {
-                    _pageController.animateToPage(
-                      index,
+                  onTap: () => _pageController.animateToPage(i,
                       duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeInOut,
-                    );
-                  },
+                      curve: Curves.easeInOut),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
-                    curve: Curves.easeInOut,
                     width: 48,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: isSelected
+                      color: sel
                           ? AppColors.primary
                           : isDark
                               ? AppColors.surfaceLight
                               : Colors.white,
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
-                        color: isSelected
+                        color: sel
                             ? AppColors.primary
-                            : (isDark
+                            : isDark
                                 ? AppColors.divider
-                                : AppColors.dividerLight),
-                        width: isSelected ? 1.5 : 0.5,
+                                : AppColors.dividerLight,
+                        width: sel ? 1.5 : 0.5,
                       ),
                     ),
                     child: Text(
-                      '$pageNum',
+                      '$num',
                       style: GoogleFonts.poppins(
                         fontSize: 12,
-                        fontWeight:
-                            isSelected ? FontWeight.w700 : FontWeight.w500,
-                        color: isSelected
+                        fontWeight: sel ? FontWeight.w700 : FontWeight.w500,
+                        color: sel
                             ? Colors.white
                             : isDark
                                 ? AppColors.textSecondary
@@ -235,272 +222,355 @@ class _QuranPageViewState extends State<QuranPageView> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// _MushafPage — single page with flowing Arabic text and word highlights
+// _MushafPage — a single Mushaf page with line-based layout
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _MushafPage extends StatelessWidget {
+class _MushafPage extends StatefulWidget {
   final int pageNumber;
-  final List<Ayah> verses;
   final Surah surah;
   final bool isFirstPage;
   final int? currentPlayingAyahId;
   final int? currentWordIndex;
-  final Map<int, VerseTimings>? wordTimings;
   final bool isDark;
   final ValueChanged<int>? onAyahTap;
 
   const _MushafPage({
     required this.pageNumber,
-    required this.verses,
     required this.surah,
     required this.isFirstPage,
     this.currentPlayingAyahId,
     this.currentWordIndex,
-    this.wordTimings,
     required this.isDark,
     this.onAyahTap,
   });
 
   @override
+  State<_MushafPage> createState() => _MushafPageState();
+}
+
+class _MushafPageState extends State<_MushafPage>
+    with AutomaticKeepAliveClientMixin {
+  MushafPageData? _data;
+  bool _loading = true;
+  bool _error = false;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final data = await MushafDataService.instance.getPage(widget.pageNumber);
+    if (!mounted) return;
+    setState(() {
+      _data = data;
+      _loading = false;
+      _error = data == null;
+    });
+  }
+
+  // ── Highlight colours ──
+  static const _verseHL = Color(0x183B82F6); // 10 % blue
+  static const _wordHL = Color(0x403B82F6); // 25 % blue
+  static const _wordHLDark = Color(0x503B82F6); // 31 % blue (dark mode)
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context);
+
+    if (_loading) {
+      return const Center(
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
+    }
+
+    if (_error || _data == null) {
+      return _fallbackPage();
+    }
+
+    return _buildMushafPage();
+  }
+
+  /// Fallback: simple text rendering if API fails.
+  Widget _fallbackPage() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      child: Column(
-        children: [
-          if (isFirstPage) ...[
-            _SurahHeader(surah: surah, isDark: isDark),
-            const SizedBox(height: 16),
-          ],
-          // Flowing Arabic text with word-level highlighting
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: isDark ? AppColors.surface : Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: (isDark ? AppColors.divider : AppColors.dividerLight)
-                    .withValues(alpha: 0.3),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black
-                      .withValues(alpha: isDark ? 0.1 : 0.03),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: RichText(
-              textAlign: TextAlign.center,
-              textDirection: TextDirection.rtl,
-              text: TextSpan(
-                children: _buildVerseSpans(context),
-              ),
-            ),
+      padding: const EdgeInsets.all(20),
+      child: Center(
+        child: Text(
+          widget.surah.verses
+              .where((a) => a.pageNumber == widget.pageNumber)
+              .map((a) => a.text)
+              .join(' '),
+          textAlign: TextAlign.center,
+          textDirection: TextDirection.rtl,
+          style: const TextStyle(
+            fontFamily: 'Scheherazade',
+            fontSize: 24,
+            height: 2.0,
           ),
-        ],
+        ),
       ),
     );
   }
 
-  List<InlineSpan> _buildVerseSpans(BuildContext context) {
-    final spans = <InlineSpan>[];
+  Widget _buildMushafPage() {
+    final lines = _data!.lines;
+    final allLineNums = lines.keys.toList()..sort();
+    final maxLine = allLineNums.isEmpty ? 1 : allLineNums.last;
+    // Detect surah header lines (lines before first content line)
+    final firstLine = allLineNums.isEmpty ? 1 : allLineNums.first;
 
-    // Highlight colors
-    final verseHighlight = const Color(0xFF3B82F6).withValues(alpha: 0.10);
-    final wordHighlight = isDark
-        ? const Color(0xFF3B82F6).withValues(alpha: 0.35)
-        : const Color(0xFF3B82F6).withValues(alpha: 0.25);
-
-    for (final ayah in verses) {
-      final isPlayingVerse = ayah.id == currentPlayingAyahId;
-      final hasTimings = wordTimings != null && wordTimings!.containsKey(ayah.id);
-      final useWordHighlight = isPlayingVerse && hasTimings;
-
-      if (useWordHighlight) {
-        // ── Word-by-word rendering for the currently playing verse ──
-        final words = ayah.text.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
-
-        for (int w = 0; w < words.length; w++) {
-          final isActiveWord = w == currentWordIndex;
-
-          spans.add(
-            WidgetSpan(
-              child: GestureDetector(
-                onTap: () => onAyahTap?.call(ayah.id),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  curve: Curves.easeOut,
-                  padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: isActiveWord ? wordHighlight : verseHighlight,
-                    borderRadius: BorderRadius.circular(6),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Container(
+        decoration: BoxDecoration(
+          color: widget.isDark
+              ? AppColors.surface
+              : const Color(0xFFFFFBF5), // warm cream
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: widget.isDark
+                ? AppColors.divider.withValues(alpha: 0.3)
+                : const Color(0xFFD5C4A1).withValues(alpha: 0.6),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: widget.isDark ? 0.12 : 0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            // ── Inner decorative border ──
+            Expanded(
+              child: Container(
+                margin: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: widget.isDark
+                        ? AppColors.accent.withValues(alpha: 0.15)
+                        : const Color(0xFFD4A574).withValues(alpha: 0.35),
                   ),
-                  child: Text(
-                    words[w],
-                    style: TextStyle(
-                      fontFamily: 'Scheherazade',
-                      fontSize: 24,
-                      height: 2.2,
-                      color: isActiveWord
-                          ? (isDark ? Colors.white : const Color(0xFF1A3A5C))
-                          : (isDark ? AppColors.textArabic : Colors.black87),
-                    ),
-                  ),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final lineHeight = constraints.maxHeight / maxLine;
+
+                    return Column(
+                      children: [
+                        // Surah header (if content starts after line 1)
+                        if (widget.isFirstPage || firstLine > 1)
+                          _surahHeader(lineHeight, firstLine - 1),
+
+                        // ── Content lines ──
+                        for (int ln = firstLine; ln <= maxLine; ln++)
+                          SizedBox(
+                            height: lineHeight,
+                            child: _buildLine(lines[ln] ?? []),
+                          ),
+                      ],
+                    );
+                  },
                 ),
               ),
             ),
-          );
 
-          // Space between words
-          if (w < words.length - 1) {
-            spans.add(const TextSpan(text: ' '));
-          }
-        }
-      } else {
-        // ── Single block for non-playing verses (or no timing data) ──
-        spans.add(
-          WidgetSpan(
-            child: GestureDetector(
-              onTap: () => onAyahTap?.call(ayah.id),
-              child: Container(
-                padding: isPlayingVerse
-                    ? const EdgeInsets.symmetric(horizontal: 4, vertical: 2)
-                    : null,
-                decoration: isPlayingVerse
-                    ? BoxDecoration(
-                        color: verseHighlight,
-                        borderRadius: BorderRadius.circular(6),
-                      )
-                    : null,
-                child: Text(
-                  ayah.text,
-                  style: TextStyle(
-                    fontFamily: 'Scheherazade',
-                    fontSize: 24,
-                    height: 2.2,
-                    color: isPlayingVerse
-                        ? (isDark ? AppColors.accentLight : AppColors.primary)
-                        : (isDark ? AppColors.textArabic : Colors.black87),
-                  ),
+            // ── Page number ──
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                '${widget.pageNumber}',
+                style: GoogleFonts.poppins(
+                  fontSize: 11,
+                  color: widget.isDark
+                      ? AppColors.textSecondary
+                      : const Color(0xFF8C7A5E),
                 ),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Decorative surah header (name + bismillah).
+  Widget _surahHeader(double lineHeight, int headerLines) {
+    if (headerLines <= 0) headerLines = 1;
+    final surah = widget.surah;
+    final showBismillah = surah.id != 9; // no bismillah for At-Tawbah
+
+    return SizedBox(
+      height: lineHeight * headerLines,
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: widget.isDark
+                  ? [
+                      AppColors.accent.withValues(alpha: 0.08),
+                      AppColors.accent.withValues(alpha: 0.02),
+                    ]
+                  : [
+                      const Color(0xFFF5ECD7),
+                      const Color(0xFFFFF8EE),
+                    ],
+            ),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: widget.isDark
+                  ? AppColors.accent.withValues(alpha: 0.2)
+                  : const Color(0xFFD4A574).withValues(alpha: 0.5),
             ),
           ),
-        );
-      }
-
-      // ── Verse number badge ──
-      spans.add(
-        WidgetSpan(
-          alignment: PlaceholderAlignment.middle,
-          child: GestureDetector(
-            onTap: () => onAyahTap?.call(ayah.id),
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 4),
-              width: 30,
-              height: 30,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isPlayingVerse
-                    ? const Color(0xFF3B82F6).withValues(alpha: 0.2)
-                    : AppColors.primary.withValues(alpha: 0.1),
-                border: Border.all(
-                  color: isPlayingVerse
-                      ? const Color(0xFF3B82F6)
-                      : AppColors.primary.withValues(alpha: 0.3),
-                  width: 1,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'سُورَةُ ${surah.name.replaceAll('سُورَةُ ', '').replaceAll('سورة ', '')}',
+                style: TextStyle(
+                  fontFamily: 'Scheherazade',
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: widget.isDark
+                      ? AppColors.accent
+                      : const Color(0xFF6B4F2E),
                 ),
               ),
-              child: Center(
-                child: Text(
-                  '${ayah.id}',
+              if (showBismillah && headerLines >= 2) ...[
+                const SizedBox(height: 2),
+                Text(
+                  'بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ',
                   style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: isPlayingVerse
-                        ? const Color(0xFF3B82F6)
-                        : AppColors.primary,
+                    fontFamily: 'Scheherazade',
+                    fontSize: 16,
+                    color: widget.isDark
+                        ? AppColors.textArabic
+                        : const Color(0xFF3D2B14),
                   ),
                 ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Build a single line of Mushaf text (one Row of word widgets, RTL).
+  Widget _buildLine(List<MushafWord> words) {
+    if (words.isEmpty) return const SizedBox.expand();
+
+    // Short lines (≤3 items) are centered; full lines are justified
+    final isPartial = words.length <= 3;
+
+    return Row(
+      textDirection: TextDirection.rtl,
+      mainAxisAlignment:
+          isPartial ? MainAxisAlignment.center : MainAxisAlignment.spaceBetween,
+      children: words.map((w) => _buildWord(w)).toList(),
+    );
+  }
+
+  Widget _buildWord(MushafWord word) {
+    final isPlayingVerse =
+        word.verseNumber == widget.currentPlayingAyahId &&
+            word.surahNumber == widget.surah.id;
+    final isActiveWord = isPlayingVerse &&
+        !word.isEnd &&
+        word.wordIndex == widget.currentWordIndex;
+
+    Color? bg;
+    if (isActiveWord) {
+      bg = widget.isDark ? _wordHLDark : _wordHL;
+    } else if (isPlayingVerse) {
+      bg = _verseHL;
+    }
+
+    // Verse-end marker (number ornament)
+    if (word.isEnd) {
+      return GestureDetector(
+        onTap: () => widget.onAyahTap?.call(word.verseNumber),
+        child: Container(
+          width: 26,
+          height: 26,
+          margin: const EdgeInsets.symmetric(horizontal: 2),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: isPlayingVerse
+                ? const Color(0xFF3B82F6).withValues(alpha: 0.15)
+                : AppColors.primary.withValues(alpha: 0.08),
+            border: Border.all(
+              color: isPlayingVerse
+                  ? const Color(0xFF3B82F6).withValues(alpha: 0.5)
+                  : AppColors.primary.withValues(alpha: 0.3),
+              width: 1,
+            ),
+          ),
+          child: Center(
+            child: Text(
+              _toArabicNumeral(word.verseNumber),
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: isPlayingVerse
+                    ? const Color(0xFF3B82F6)
+                    : AppColors.primary,
               ),
             ),
           ),
         ),
       );
-
-      spans.add(const TextSpan(text: ' '));
     }
 
-    return spans;
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// _SurahHeader
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _SurahHeader extends StatelessWidget {
-  final Surah surah;
-  final bool isDark;
-
-  const _SurahHeader({required this.surah, required this.isDark});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: isDark
-              ? [AppColors.gradientDarkStart, AppColors.gradientDarkEnd]
-              : [AppColors.gradientStart, AppColors.gradientEnd],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: (isDark ? Colors.black : AppColors.accent)
-                .withValues(alpha: 0.15),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+    // Regular word
+    return Flexible(
+      child: GestureDetector(
+        onTap: () => widget.onAyahTap?.call(word.verseNumber),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOut,
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(4),
           ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Text(
-            surah.name,
+          child: Text(
+            word.text,
+            textDirection: TextDirection.rtl,
+            maxLines: 1,
+            overflow: TextOverflow.visible,
             style: TextStyle(
               fontFamily: 'Scheherazade',
-              fontSize: 28,
-              color: isDark ? AppColors.accent : const Color(0xFF5C3D1A),
+              fontSize: 22,
+              height: 1.6,
+              color: isActiveWord
+                  ? (widget.isDark
+                      ? Colors.white
+                      : const Color(0xFF1A3A5C))
+                  : (widget.isDark
+                      ? AppColors.textArabic
+                      : const Color(0xFF2C1F0E)),
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            '${surah.transliteration} · ${surah.totalVerses} versets',
-            style: GoogleFonts.poppins(
-              fontSize: 13,
-              color: isDark ? AppColors.textSecondary : const Color(0xFF8C6D4F),
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 12),
-          if (surah.id != 9)
-            Text(
-              'بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ',
-              style: TextStyle(
-                fontFamily: 'Scheherazade',
-                fontSize: 22,
-                color: isDark ? AppColors.textArabic : const Color(0xFF3D2B14),
-              ),
-            ),
-        ],
+        ),
       ),
     );
+  }
+
+  /// Convert an integer to Eastern Arabic numerals (٠١٢٣٤٥٦٧٨٩).
+  static String _toArabicNumeral(int n) {
+    const digits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+    return n.toString().split('').map((c) => digits[int.parse(c)]).join();
   }
 }
