@@ -349,15 +349,24 @@ class _ReaderScreenState extends State<ReaderScreen>
                 totalVerses: widget.surah.totalVerses,
                 isHideMode: _segmentHideMode,
                 onLoop: () {
-                  // Play the ayah containing the segment
+                  // Play only the selected word segment in a loop
                   final audio = context.read<AudioService>();
-                  audio.playAyah(widget.surah.id, _selectedAyahId!, widget.surah.totalVerses);
-                  audio.setLoopMode(LoopMode.one);
+                  audio.playSegment(
+                    surahId: widget.surah.id,
+                    ayahId: _selectedAyahId!,
+                    startWordIndex: _selectedSegment!.startIndex,
+                    endWordIndex: _selectedSegment!.endIndex,
+                    allWords: _selectedSegment!.allWords,
+                    totalVerses: widget.surah.totalVerses,
+                  );
                 },
                 onHideToggle: () {
                   setState(() => _segmentHideMode = !_segmentHideMode);
                 },
                 onClear: () {
+                  // Clear A-B clip if active
+                  final audio = context.read<AudioService>();
+                  if (audio.abRepeatActive) audio.clearClip();
                   setState(() {
                     _selectedSegment = null;
                     _selectedAyahId = null;

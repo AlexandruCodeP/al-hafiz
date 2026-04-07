@@ -220,6 +220,62 @@ class AudioService extends ChangeNotifier {
     }
   }
 
+  /// Play only a segment of words within a verse.
+  ///
+  /// Estimates word-level timing by proportional character length,
+  /// then uses A-B repeat to loop just that portion.
+  Future<void> playSegment({
+    required int surahId,
+    required int ayahId,
+    required int startWordIndex,
+    required int endWordIndex,
+    required List<String> allWords,
+    int? totalVerses,
+  }) async {
+    // First, make sure the ayah is loaded
+    await playAyah(surahId, ayahId, totalVerses);
+
+    // Wait for the duration to be available
+    Duration? dur = _duration;
+    if (dur == Duration.zero) {
+      // Listen for the first non-zero duration
+      dur = await _player.durationStream
+          .where((d) => d != null && d > Duration.zero)
+          .first
+          .timeout(const Duration(seconds: 5), onTimeout: () => null);
+    }
+
+    if (dur == null || dur == Duration.zero) return;
+
+    // Estimate word timings proportionally by character count
+    // (Arabic diacritics are lightweight, base chars carry the weight)
+    final wordLengths = allWords.map((w) => w.runes.length.toDouble()).toList();
+    final totalChars = wordLengths.fold(0.0, (a, b) => a + b);
+    if (totalChars == 0) return;
+
+    final totalMs = dur.inMilliseconds.toDouble();
+    double cumulMs = 0;
+    final wordStarts = <double>[];
+    final wordEnds = <double>[];
+
+    for (int i = 0; i < wordLengths.length; i++) {
+      wordStarts.add(cumulMs);
+      cumulMs += (wordLengths[i] / totalChars) * totalMs;
+      wordEnds.add(cumulMs);
+    }
+
+    // Add a small margin (100ms) before/after for smoother clipping
+    final clipStartMs = (wordStarts[startWordIndex] - 100).clamp(0, totalMs);
+    final clipEndMs = (wordEnds[endWordIndex] + 100).clamp(0, totalMs);
+
+    final clipStart = Duration(milliseconds: clipStartMs.round());
+    final clipEnd = Duration(milliseconds: clipEndMs.round());
+
+    // Seek to clip start and set A-B repeat
+    await _player.seek(clipStart);
+    setClip(clipStart, clipEnd);
+  }
+
   Future<void> setLoopMode(LoopMode mode) async {
     await _player.setLoopMode(mode);
     notifyListeners();
