@@ -5,8 +5,8 @@ import '../models/mushaf.dart';
 
 /// Fetches and caches mushaf page data from the Quran.com v4 API.
 ///
-/// Transforms the API response (organized by verse) into our page > line > token
-/// structure matching the physical mushaf layout.
+/// Transforms the API response (organized by verse) into our
+/// page → line → concatenated QCF string structure.
 class MushafService {
   static final MushafService instance = MushafService._();
   MushafService._();
@@ -14,8 +14,6 @@ class MushafService {
   final Map<int, MushafPage> _cache = {};
 
   /// Returns a [MushafPage] for the given [pageNumber] (1–604).
-  ///
-  /// Returns null if the fetch fails.
   Future<MushafPage?> getPage(int pageNumber) async {
     if (_cache.containsKey(pageNumber)) return _cache[pageNumber];
 
@@ -23,7 +21,7 @@ class MushafService {
       final uri = Uri.parse(
         'https://api.quran.com/api/v4/verses/by_page/$pageNumber'
         '?words=true'
-        '&word_fields=code_v2,v2_page,line_number,text_uthmani'
+        '&word_fields=code_v2,v2_page,line_number'
         '&per_page=50',
       );
 
@@ -52,15 +50,14 @@ class MushafService {
   /// Parses the Quran.com API response into a [MushafPage].
   MushafPage _parse(int pageNumber, Map<String, dynamic> json) {
     final verses = json['verses'] as List? ?? [];
-
-    // Collect juz number from the first verse.
     int juzNumber = 1;
 
-    // Group tokens by line number.
-    final lineMap = <int, List<MushafToken>>{};
+    // Intermediate: collect raw words grouped by line number.
+    // Each word keeps its codeV2 + ayah identity.
+    final lineWords = <int, List<_RawWord>>{};
 
     for (final verse in verses) {
-      final vk = verse['verse_key'] as String; // "2:6"
+      final vk = verse['verse_key'] as String;
       final parts = vk.split(':');
       final surahNum = int.parse(parts[0]);
       final ayahNum = int.parse(parts[1]);
@@ -68,38 +65,54 @@ class MushafService {
 
       final words = verse['words'] as List? ?? [];
       for (final word in words) {
-        // Skip words that belong to a different page.
         final wordPage = word['page_number'] as int?;
         if (wordPage != null && wordPage != pageNumber) continue;
 
         final lineNum = word['line_number'] as int? ?? 1;
         final position = word['position'] as int? ?? 1;
-        final charType = word['char_type_name'] as String? ?? 'word';
-        final textUthmani =
-            word['text_uthmani'] as String? ?? word['text'] as String? ?? '';
         final codeV2 = word['code_v2'] as String? ?? '';
 
-        lineMap.putIfAbsent(lineNum, () => []).add(MushafToken(
+        if (codeV2.isEmpty) {
+          debugPrint(
+              'MushafService: MISSING code_v2 for page $pageNumber '
+              'line $lineNum surah $surahNum ayah $ayahNum word $position');
+        }
+
+        lineWords.putIfAbsent(lineNum, () => []).add(_RawWord(
+          codeV2: codeV2,
           surah: surahNum,
           ayah: ayahNum,
-          wordIndex: position,
-          text: textUthmani,
-          codeV2: codeV2,
-          type: charType == 'end' ? TokenType.end : TokenType.word,
+          position: position,
         ));
       }
     }
 
-    // Sort tokens within each line by position.
-    for (final tokens in lineMap.values) {
-      tokens.sort((a, b) => a.wordIndex.compareTo(b.wordIndex));
-    }
+    // Build MushafLines: sort words, concatenate QCF, collect ayah refs.
+    final sortedLineNums = lineWords.keys.toList()..sort();
+    final lines = <MushafLine>[];
 
-    // Build ordered list of MushafLines.
-    final sortedLineNums = lineMap.keys.toList()..sort();
-    final lines = sortedLineNums
-        .map((ln) => MushafLine(lineNumber: ln, tokens: lineMap[ln]!))
-        .toList();
+    for (final ln in sortedLineNums) {
+      final words = lineWords[ln]!;
+      words.sort((a, b) => a.position.compareTo(b.position));
+
+      // Concatenate all QCF glyphs into a single string.
+      final textQcf = words.map((w) => w.codeV2).join();
+
+      // Collect distinct ayahs in order of appearance.
+      final ayahs = <AyahRef>[];
+      for (final w in words) {
+        final ref = AyahRef(surah: w.surah, ayah: w.ayah);
+        if (ayahs.isEmpty || ayahs.last != ref) {
+          ayahs.add(ref);
+        }
+      }
+
+      lines.add(MushafLine(
+        lineNumber: ln,
+        textQcf: textQcf,
+        ayahs: ayahs,
+      ));
+    }
 
     return MushafPage(
       pageNumber: pageNumber,
@@ -107,4 +120,19 @@ class MushafService {
       lines: lines,
     );
   }
+}
+
+/// Internal helper for parsing.
+class _RawWord {
+  final String codeV2;
+  final int surah;
+  final int ayah;
+  final int position;
+
+  const _RawWord({
+    required this.codeV2,
+    required this.surah,
+    required this.ayah,
+    required this.position,
+  });
 }

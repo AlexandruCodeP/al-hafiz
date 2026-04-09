@@ -7,10 +7,13 @@ import '../services/mushaf_service.dart';
 import '../services/qcf_font_service.dart';
 import '../theme/app_theme.dart';
 
-/// Mushaf page screen (Étape 3 — design + swipe + QCF).
+/// Mushaf page screen — swipable pages with QCF calligraphic rendering.
 ///
-/// Full-screen PageView with swipe navigation, QCF calligraphic fonts,
-/// decorative borders, and audio-synchronized ayah highlighting.
+/// Architecture:
+/// - Rendering is pure presentation: one [Text] widget per line using
+///   the concatenated QCF string. No Row-of-tokens, no FittedBox.
+/// - Interaction (tap-to-play, highlight) is a logical overlay based
+///   on the line's ayah range, without breaking the typography.
 class MushafPageScreen extends StatefulWidget {
   final int initialPage;
 
@@ -28,10 +31,8 @@ class _MushafPageScreenState extends State<MushafPageScreen> {
   void initState() {
     super.initState();
     _currentPage = widget.initialPage;
-    // PageView index 0 = page 1. Reversed for RTL swipe.
     _pageController = PageController(initialPage: _currentPage - 1);
 
-    // Prefetch data + fonts for initial pages.
     final pages = List.generate(5, (i) => _currentPage + i)
         .where((p) => p >= 1 && p <= 604)
         .toList();
@@ -50,49 +51,38 @@ class _MushafPageScreenState extends State<MushafPageScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.background : AppColors.backgroundLight,
-      appBar: AppBar(
-        title: Text('Page $_currentPage'),
-        centerTitle: true,
-      ),
+      backgroundColor:
+          isDark ? AppColors.background : AppColors.backgroundLight,
+      appBar: AppBar(title: Text('Page $_currentPage')),
       body: Column(
         children: [
-          // ── Page area (swipe) ──
           Expanded(
             child: PageView.builder(
               controller: _pageController,
-              reverse: true, // RTL: swipe left = next page
+              reverse: true, // RTL swipe
               itemCount: 604,
-              onPageChanged: (index) {
-                final page = index + 1;
+              onPageChanged: (i) {
+                final page = i + 1;
                 setState(() => _currentPage = page);
-                // Prefetch ahead.
-                final next = List.generate(3, (i) => page + i + 1)
+                final next = List.generate(3, (j) => page + j + 1)
                     .where((p) => p <= 604)
                     .toList();
                 MushafService.instance.prefetch(next);
                 QcfFontService.instance.prefetch(next);
               },
-              itemBuilder: (_, index) {
-                final pageNum = index + 1;
-                return _MushafPageWidget(
-                  key: ValueKey(pageNum),
-                  pageNumber: pageNum,
-                );
-              },
+              itemBuilder: (_, i) => _MushafPageWidget(
+                key: ValueKey(i + 1),
+                pageNumber: i + 1,
+              ),
             ),
           ),
-
-          // ── Page number bar ──
           _PageBar(
             currentPage: _currentPage,
-            onPageTap: (page) {
-              _pageController.animateToPage(
-                page - 1,
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeInOut,
-              );
-            },
+            onPageTap: (p) => _pageController.animateToPage(
+              p - 1,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+            ),
           ),
         ],
       ),
@@ -101,12 +91,11 @@ class _MushafPageScreenState extends State<MushafPageScreen> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// _MushafPageWidget — a single mushaf page (loads data + font, renders)
+// _MushafPageWidget — loads data + font, then delegates to _MushafPageContent
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _MushafPageWidget extends StatefulWidget {
   final int pageNumber;
-
   const _MushafPageWidget({super.key, required this.pageNumber});
 
   @override
@@ -118,7 +107,6 @@ class _MushafPageWidgetState extends State<_MushafPageWidget>
   MushafPage? _data;
   bool _loading = true;
   bool _fontReady = false;
-  bool _error = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -134,14 +122,11 @@ class _MushafPageWidgetState extends State<_MushafPageWidget>
       MushafService.instance.getPage(widget.pageNumber),
       QcfFontService.instance.loadFont(widget.pageNumber),
     ]);
-
     if (!mounted) return;
-
     setState(() {
       _data = results[0] as MushafPage?;
       _fontReady = results[1] as bool;
       _loading = false;
-      _error = _data == null;
     });
   }
 
@@ -151,21 +136,20 @@ class _MushafPageWidgetState extends State<_MushafPageWidget>
 
     if (_loading) {
       return const Center(
-        child: CircularProgressIndicator(
-          strokeWidth: 2.5,
-          color: AppColors.primary,
-        ),
+        child:
+            CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.primary),
       );
     }
 
-    if (_error || _data == null) {
+    if (_data == null || !_fontReady) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.cloud_off_rounded, size: 40, color: AppColors.textSecondary),
+            const Icon(Icons.cloud_off_rounded,
+                size: 40, color: AppColors.textSecondary),
             const SizedBox(height: 12),
-            Text('Impossible de charger la page ${widget.pageNumber}'),
+            Text('Page ${widget.pageNumber} — échec du chargement'),
             const SizedBox(height: 8),
             TextButton(
               onPressed: () {
@@ -179,29 +163,89 @@ class _MushafPageWidgetState extends State<_MushafPageWidget>
       );
     }
 
-    return _MushafPageContent(
-      data: _data!,
-      fontReady: _fontReady,
-    );
+    return _MushafPageContent(data: _data!);
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// _MushafPageContent — renders page lines inside a decorative frame
+// _MushafPageContent — pure presentation + interaction overlay
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _MushafPageContent extends StatelessWidget {
   final MushafPage data;
-  final bool fontReady;
+  const _MushafPageContent({required this.data});
 
-  const _MushafPageContent({required this.data, required this.fontReady});
+  // ── Page geometry ──
+  static const _pageAspect = 3.0 / 4.0; // width / height
+  static const _marginH = 0.08; // horizontal margin as fraction of width
+  static const _marginTop = 0.06; // top margin as fraction of height
+  static const _marginBottom = 0.05; // bottom margin as fraction of height
+  static const _linesPerPage = 15;
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final outerBorder = isDark ? const Color(0xFF6B5A3E) : const Color(0xFFB8956A);
-    final innerBorder = isDark ? const Color(0xFF4A3F2E) : const Color(0xFFD4B896);
+    final outerBorder =
+        isDark ? const Color(0xFF6B5A3E) : const Color(0xFFB8956A);
+    final innerBorder =
+        isDark ? const Color(0xFF4A3F2E) : const Color(0xFFD4B896);
     final pageBg = isDark ? const Color(0xFF1E1A14) : const Color(0xFFFFFBF5);
+
+    return Center(
+      child: AspectRatio(
+        aspectRatio: _pageAspect,
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: pageBg,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: outerBorder, width: 2),
+            boxShadow: [
+              BoxShadow(
+                color:
+                    Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+                blurRadius: 12,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Container(
+            margin: const EdgeInsets.all(5),
+            decoration: BoxDecoration(
+              border:
+                  Border.all(color: innerBorder.withValues(alpha: 0.6)),
+              borderRadius: BorderRadius.circular(3),
+            ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return _buildPage(context, constraints, isDark);
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPage(
+      BuildContext context, BoxConstraints constraints, bool isDark) {
+    final w = constraints.maxWidth;
+    final h = constraints.maxHeight;
+    final padH = w * _marginH;
+    final padTop = h * _marginTop;
+    final padBottom = h * _marginBottom;
+    final contentH = h - padTop - padBottom;
+    final lineHeight = contentH / _linesPerPage;
+
+    final fontFamily =
+        QcfFontService.instance.fontFamily(data.pageNumber);
+
+    // Calibrated font size: QCF glyphs are designed for ~28px at 15 lines.
+    // Scale relative to the available line height.
+    final fontSize = lineHeight * 0.95;
+
+    final textColor =
+        isDark ? const Color(0xFFE8DFD1) : const Color(0xFF1C1206);
 
     return Consumer<AudioService>(
       builder: (context, audio, _) {
@@ -209,198 +253,109 @@ class _MushafPageContent extends StatelessWidget {
         final activeAyah = audio.currentAyahId;
 
         return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Container(
-            decoration: BoxDecoration(
-              color: pageBg,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: outerBorder, width: 2),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
-                  blurRadius: 12,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: Container(
-              margin: const EdgeInsets.all(5),
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: innerBorder.withValues(alpha: 0.6),
-                  width: 1,
-                ),
-                borderRadius: BorderRadius.circular(3),
-              ),
-              child: Column(
-                children: [
-                  // ── Lines ──
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                      child: _buildLines(
-                        context, audio, activeSurah, activeAyah, isDark),
-                    ),
+          padding: EdgeInsets.fromLTRB(padH, padTop, padH, 0),
+          child: Column(
+            children: [
+              // ── Lines ──
+              for (int ln = 1; ln <= _linesPerPage; ln++)
+                SizedBox(
+                  height: lineHeight,
+                  child: _buildLineWidget(
+                    _lineFor(ln),
+                    fontFamily,
+                    fontSize,
+                    textColor,
+                    isDark,
+                    audio,
+                    activeSurah,
+                    activeAyah,
                   ),
+                ),
 
-                  // ── Page number ──
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Text(
-                      '${data.pageNumber}',
-                      style: GoogleFonts.amiri(
-                        fontSize: 13,
-                        color: isDark
-                            ? AppColors.textSecondary
-                            : const Color(0xFF8C7A5E),
-                      ),
+              // ── Page number ──
+              Expanded(
+                child: Center(
+                  child: Text(
+                    '${data.pageNumber}',
+                    style: GoogleFonts.amiri(
+                      fontSize: 13,
+                      color: isDark
+                          ? AppColors.textSecondary
+                          : const Color(0xFF8C7A5E),
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
         );
       },
     );
   }
 
-  Widget _buildLines(
-    BuildContext context,
-    AudioService audio,
-    int? activeSurah,
-    int? activeAyah,
-    bool isDark,
-  ) {
-    final maxLine =
-        data.lines.isEmpty ? 1 : data.lines.last.lineNumber;
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final lineHeight = constraints.maxHeight / maxLine;
-        // QCF font size scales with line height.
-        final qcfFontSize = lineHeight * 1.1;
-        final fontFamily = fontReady
-            ? QcfFontService.instance.fontFamily(data.pageNumber)
-            : null;
-
-        return Column(
-          children: [
-            for (int ln = 1; ln <= maxLine; ln++)
-              SizedBox(
-                height: lineHeight,
-                child: _buildLine(
-                  context,
-                  _tokensForLine(ln),
-                  audio,
-                  activeSurah,
-                  activeAyah,
-                  isDark,
-                  fontFamily,
-                  qcfFontSize,
-                ),
-              ),
-          ],
-        );
-      },
-    );
-  }
-
-  List<MushafToken> _tokensForLine(int lineNumber) {
+  /// Find the MushafLine for a given line number, or null.
+  MushafLine? _lineFor(int lineNumber) {
     for (final line in data.lines) {
-      if (line.lineNumber == lineNumber) return line.tokens;
+      if (line.lineNumber == lineNumber) return line;
     }
-    return const [];
+    return null;
   }
 
-  Widget _buildLine(
-    BuildContext context,
-    List<MushafToken> tokens,
+  /// Renders a single line: pure QCF text + tap overlay.
+  Widget _buildLineWidget(
+    MushafLine? line,
+    String fontFamily,
+    double fontSize,
+    Color textColor,
+    bool isDark,
     AudioService audio,
     int? activeSurah,
     int? activeAyah,
-    bool isDark,
-    String? fontFamily,
-    double qcfFontSize,
   ) {
-    if (tokens.isEmpty) return const SizedBox.expand();
+    // Empty line (e.g. blank space above surah header).
+    if (line == null || line.isEmpty) return const SizedBox.expand();
 
-    return FittedBox(
-      fit: BoxFit.scaleDown,
-      child: Row(
-        textDirection: TextDirection.rtl,
-        mainAxisSize: MainAxisSize.min,
-        children: tokens
-            .map((t) => _buildToken(
-                  context, t, audio, activeSurah, activeAyah,
-                  isDark, fontFamily, qcfFontSize))
-            .toList(),
-      ),
-    );
-  }
-
-  Widget _buildToken(
-    BuildContext context,
-    MushafToken token,
-    AudioService audio,
-    int? activeSurah,
-    int? activeAyah,
-    bool isDark,
-    String? fontFamily,
-    double qcfFontSize,
-  ) {
-    final isActive = token.surah == activeSurah && token.ayah == activeAyah;
-
-    // Use QCF glyph if font is ready, otherwise fallback to Uthmani text.
-    final useQcf = fontFamily != null && token.codeV2.isNotEmpty;
-    final displayText = useQcf ? token.codeV2 : token.text;
-    final textStyle = useQcf
-        ? TextStyle(
-            fontFamily: fontFamily,
-            fontSize: qcfFontSize,
-            height: 1.0,
-            color: isActive
-                ? (isDark ? AppColors.accentLight : const Color(0xFF6B4F2E))
-                : (isDark ? const Color(0xFFE8DFD1) : const Color(0xFF1C1206)),
-          )
-        : TextStyle(
-            fontFamily: 'Scheherazade',
-            fontSize: 22,
-            height: 1.8,
-            color: isActive
-                ? (isDark ? AppColors.accentLight : const Color(0xFF6B4F2E))
-                : (isDark ? AppColors.textArabic : const Color(0xFF2C1F0E)),
-          );
+    // Is this line currently playing?
+    final isActive = activeSurah != null &&
+        activeAyah != null &&
+        line.containsAyah(activeSurah, activeAyah);
 
     final highlightColor = isDark
-        ? AppColors.accent.withValues(alpha: 0.18)
-        : AppColors.primary.withValues(alpha: 0.12);
+        ? AppColors.accent.withValues(alpha: 0.15)
+        : AppColors.primary.withValues(alpha: 0.10);
 
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: () {
-        // Find max ayah for this surah on this page (for continuous reading).
-        int maxAyah = 0;
-        for (final line in data.lines) {
-          for (final t in line.tokens) {
-            if (t.surah == token.surah && t.ayah > maxAyah) {
-              maxAyah = t.ayah;
-            }
-          }
+        // Play the first ayah on this line.
+        if (line.ayahs.isNotEmpty) {
+          final first = line.ayahs.first;
+          audio.playAyah(first.surah, first.ayah);
         }
-        audio.playAyah(token.surah, token.ayah, maxAyah);
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 1),
         decoration: BoxDecoration(
           color: isActive ? highlightColor : null,
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(3),
         ),
+        alignment: Alignment.center,
         child: Text(
-          displayText,
+          line.textQcf,
           textDirection: TextDirection.rtl,
-          style: textStyle,
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.visible,
+          style: TextStyle(
+            fontFamily: fontFamily,
+            fontSize: fontSize,
+            height: 1.0,
+            color: isActive
+                ? (isDark
+                    ? AppColors.accentLight
+                    : const Color(0xFF6B4F2E))
+                : textColor,
+          ),
         ),
       ),
     );
@@ -414,7 +369,6 @@ class _MushafPageContent extends StatelessWidget {
 class _PageBar extends StatefulWidget {
   final int currentPage;
   final ValueChanged<int> onPageTap;
-
   const _PageBar({required this.currentPage, required this.onPageTap});
 
   @override
@@ -422,38 +376,32 @@ class _PageBar extends StatefulWidget {
 }
 
 class _PageBarState extends State<_PageBar> {
-  final ScrollController _scrollController = ScrollController();
+  final ScrollController _sc = ScrollController();
 
   @override
-  void didUpdateWidget(_PageBar oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.currentPage != oldWidget.currentPage) {
-      _scrollToCurrentPage();
-    }
+  void didUpdateWidget(_PageBar old) {
+    super.didUpdateWidget(old);
+    if (widget.currentPage != old.currentPage) _scrollTo();
   }
 
-  void _scrollToCurrentPage() {
-    const chipWidth = 54.0;
-    final offset = ((widget.currentPage - 1) * chipWidth) - 120;
-    if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        offset.clamp(0.0, _scrollController.position.maxScrollExtent),
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOut,
-      );
+  void _scrollTo() {
+    const cw = 54.0;
+    final off = ((widget.currentPage - 1) * cw) - 120;
+    if (_sc.hasClients) {
+      _sc.animateTo(off.clamp(0.0, _sc.position.maxScrollExtent),
+          duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
     }
   }
 
   @override
   void dispose() {
-    _scrollController.dispose();
+    _sc.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Container(
       height: 44,
       decoration: BoxDecoration(
@@ -467,13 +415,13 @@ class _PageBarState extends State<_PageBar> {
         ),
       ),
       child: ListView.builder(
-        controller: _scrollController,
+        controller: _sc,
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         itemCount: 604,
         itemBuilder: (_, i) {
           final page = i + 1;
-          final selected = page == widget.currentPage;
+          final sel = page == widget.currentPage;
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 3),
             child: GestureDetector(
@@ -483,27 +431,27 @@ class _PageBarState extends State<_PageBar> {
                 width: 48,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: selected
+                  color: sel
                       ? AppColors.primary
                       : isDark
                           ? AppColors.surfaceLight
                           : Colors.white,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                    color: selected
+                    color: sel
                         ? AppColors.primary
                         : isDark
                             ? AppColors.divider
                             : AppColors.dividerLight,
-                    width: selected ? 1.5 : 0.5,
+                    width: sel ? 1.5 : 0.5,
                   ),
                 ),
                 child: Text(
                   '$page',
                   style: GoogleFonts.poppins(
                     fontSize: 12,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                    color: selected
+                    fontWeight: sel ? FontWeight.w700 : FontWeight.w500,
+                    color: sel
                         ? Colors.white
                         : isDark
                             ? AppColors.textSecondary
