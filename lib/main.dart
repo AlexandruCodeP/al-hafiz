@@ -91,12 +91,48 @@ class _MainShell extends StatefulWidget {
 class _MainShellState extends State<_MainShell> {
   int _currentIndex = 0;
 
+  Widget _buildNavItem({
+    required int index,
+    required IconData icon,
+    required IconData selectedIcon,
+    required String label,
+    required Color color,
+  }) {
+    final isSelected = _currentIndex == index;
+    return Expanded(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => setState(() => _currentIndex = index),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              isSelected ? selectedIcon : icon,
+              color: isSelected ? color : AppColors.textSecondary,
+              size: 22,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                color: isSelected ? color : AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final storage = context.watch<StorageService>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
+      extendBody: true,
       body: IndexedStack(
         index: _currentIndex,
         children: [
@@ -107,42 +143,58 @@ class _MainShellState extends State<_MainShell> {
           const SettingsScreen(),
         ],
       ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.surface : AppColors.surfaceLightT,
-          border: Border(
-            top: BorderSide(
-              color: AppColors.divider.withValues(alpha: 0.1),
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+        child: Container(
+          height: 64,
+          decoration: BoxDecoration(
+            color: isDark
+                ? AppColors.surface.withValues(alpha: 0.95)
+                : Colors.white.withValues(alpha: 0.95),
+            borderRadius: BorderRadius.circular(32),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 20,
+                offset: const Offset(0, 4),
+              ),
+            ],
+            border: Border.all(
+              color: isDark
+                  ? AppColors.divider.withValues(alpha: 0.08)
+                  : AppColors.divider.withValues(alpha: 0.15),
               width: 0.5,
             ),
           ),
-        ),
-        child: NavigationBar(
-          selectedIndex: _currentIndex,
-          onDestinationSelected: (index) {
-            setState(() => _currentIndex = index);
-          },
-          backgroundColor: Colors.transparent,
-          indicatorColor: AppColors.primary.withValues(alpha: 0.2),
-          height: 65,
-          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-          destinations: const [
-            NavigationDestination(
-              icon: Icon(Icons.menu_book_outlined, color: AppColors.textSecondary),
-              selectedIcon: Icon(Icons.menu_book_rounded, color: AppColors.primaryLight),
-              label: 'Quran',
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(32),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildNavItem(
+                  index: 0,
+                  icon: Icons.menu_book_outlined,
+                  selectedIcon: Icons.menu_book_rounded,
+                  label: 'Quran',
+                  color: AppColors.primaryLight,
+                ),
+                _buildNavItem(
+                  index: 1,
+                  icon: Icons.bookmark_outline_rounded,
+                  selectedIcon: Icons.bookmark_rounded,
+                  label: 'Révisions',
+                  color: AppColors.accent,
+                ),
+                _buildNavItem(
+                  index: 2,
+                  icon: Icons.settings_outlined,
+                  selectedIcon: Icons.settings_rounded,
+                  label: 'Réglages',
+                  color: AppColors.primary,
+                ),
+              ],
             ),
-            NavigationDestination(
-              icon: Icon(Icons.bookmark_outline_rounded, color: AppColors.textSecondary),
-              selectedIcon: Icon(Icons.bookmark_rounded, color: AppColors.accent),
-              label: 'Révisions',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.settings_outlined, color: AppColors.textSecondary),
-              selectedIcon: Icon(Icons.settings_rounded, color: AppColors.primary),
-              label: 'Réglages',
-            ),
-          ],
+          ),
         ),
       ),
     );
