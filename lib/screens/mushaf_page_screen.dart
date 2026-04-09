@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/mushaf.dart';
+import '../services/audio_service.dart';
 import '../services/mushaf_service.dart';
 
-/// Minimal mushaf page screen.
+/// Minimal mushaf page screen (Étape 2).
 ///
 /// Displays a single mushaf page as a Column of RTL lines,
 /// each line being a Row of tappable word widgets.
-/// No decorations — just the text layout from the API data.
+/// Tapping a word plays the corresponding ayah via AudioService.
+/// The active ayah is highlighted during playback.
 class MushafPageScreen extends StatefulWidget {
   final int initialPage;
 
@@ -42,12 +45,17 @@ class _MushafPageScreenState extends State<MushafPageScreen> {
     setState(() {
       _pageData = data;
       _loading = false;
-      _error = data == null ? 'Impossible de charger la page $_currentPage' : null;
+      _error =
+          data == null ? 'Impossible de charger la page $_currentPage' : null;
     });
 
     // Prefetch neighbours.
-    if (_currentPage < 604) MushafService.instance.prefetch([_currentPage + 1]);
-    if (_currentPage > 1) MushafService.instance.prefetch([_currentPage - 1]);
+    if (_currentPage < 604) {
+      MushafService.instance.prefetch([_currentPage + 1]);
+    }
+    if (_currentPage > 1) {
+      MushafService.instance.prefetch([_currentPage - 1]);
+    }
   }
 
   void _goToPage(int page) {
@@ -56,20 +64,38 @@ class _MushafPageScreenState extends State<MushafPageScreen> {
     _loadPage();
   }
 
+  /// Find the total number of verses for a surah that appears on this page.
+  /// We need this for AudioService.playAyah's optional totalVerses param.
+  int _totalVersesFor(int surah) {
+    // Simple heuristic: look at the max ayah number for this surah on this page.
+    // This is an approximation — AudioService handles continuation regardless.
+    if (_pageData == null) return 0;
+    int max = 0;
+    for (final line in _pageData!.lines) {
+      for (final t in line.tokens) {
+        if (t.surah == surah && t.ayah > max) max = t.ayah;
+      }
+    }
+    return max;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text('Page $_currentPage'),
         actions: [
+          // Quran reads RTL: left chevron = next page (higher number)
           IconButton(
             icon: const Icon(Icons.chevron_left),
-            onPressed: _currentPage < 604 ? () => _goToPage(_currentPage + 1) : null,
+            onPressed:
+                _currentPage < 604 ? () => _goToPage(_currentPage + 1) : null,
             tooltip: 'Page suivante',
           ),
           IconButton(
             icon: const Icon(Icons.chevron_right),
-            onPressed: _currentPage > 1 ? () => _goToPage(_currentPage - 1) : null,
+            onPressed:
+                _currentPage > 1 ? () => _goToPage(_currentPage - 1) : null,
             tooltip: 'Page précédente',
           ),
         ],
@@ -99,56 +125,94 @@ class _MushafPageScreenState extends State<MushafPageScreen> {
       );
     }
 
-    final page = _pageData!;
+    // Consumer listens to AudioService to rebuild on playback changes.
+    return Consumer<AudioService>(
+      builder: (context, audio, _) {
+        final page = _pageData!;
+        final activeSurah = audio.currentSurahId;
+        final activeAyah = audio.currentAyahId;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Column(
-        children: [
-          // Lines fill available space evenly.
-          for (final line in page.lines)
-            Expanded(child: _buildLine(line)),
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Column(
+            children: [
+              for (final line in page.lines)
+                Expanded(
+                  child: _buildLine(line, audio, activeSurah, activeAyah),
+                ),
 
-          // Page number at the bottom.
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text(
-              '${page.pageNumber}',
-              style: TextStyle(
-                fontSize: 12,
-                color: Theme.of(context).colorScheme.outline,
+              // Page number.
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  '${page.pageNumber}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildLine(MushafLine line) {
+  Widget _buildLine(
+    MushafLine line,
+    AudioService audio,
+    int? activeSurah,
+    int? activeAyah,
+  ) {
     if (line.tokens.isEmpty) return const SizedBox.expand();
 
     return Row(
       textDirection: TextDirection.rtl,
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.center,
-      children: line.tokens.map(_buildToken).toList(),
+      children: line.tokens
+          .map((t) => _buildToken(t, audio, activeSurah, activeAyah))
+          .toList(),
     );
   }
 
-  Widget _buildToken(MushafToken token) {
+  Widget _buildToken(
+    MushafToken token,
+    AudioService audio,
+    int? activeSurah,
+    int? activeAyah,
+  ) {
+    final isActive =
+        token.surah == activeSurah && token.ayah == activeAyah;
+
     return GestureDetector(
       onTap: () {
-        debugPrint('Tapped: surah=${token.surah} ayah=${token.ayah} '
-            'word=${token.wordIndex} type=${token.type}');
+        audio.playAyah(
+          token.surah,
+          token.ayah,
+          _totalVersesFor(token.surah),
+        );
       },
-      child: Text(
-        token.text,
-        textDirection: TextDirection.rtl,
-        style: const TextStyle(
-          fontFamily: 'Scheherazade',
-          fontSize: 22,
-          height: 1.8,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+        decoration: BoxDecoration(
+          color: isActive
+              ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.15)
+              : null,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(
+          token.text,
+          textDirection: TextDirection.rtl,
+          style: TextStyle(
+            fontFamily: 'Scheherazade',
+            fontSize: 22,
+            height: 1.8,
+            color: isActive
+                ? Theme.of(context).colorScheme.primary
+                : null,
+          ),
         ),
       ),
     );
