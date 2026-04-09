@@ -2,14 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/surah.dart';
 import '../services/mushaf_data_service.dart';
+import '../services/qcf_font_service.dart';
 import '../services/word_timing_service.dart';
 import '../theme/app_theme.dart';
 
-/// Displays a surah in authentic Mushaf page layout.
+/// Displays a surah in authentic Mushaf page layout using QCF v2 fonts.
 ///
-/// Hybrid approach: loads Mushaf page images from CDN with an interactive
-/// overlay for verse tapping and audio highlighting. Falls back to
-/// text-based rendering if the image fails to load.
+/// Each page uses a dedicated calligraphic font from the King Fahd Complex,
+/// where each Unicode codepoint maps to a hand-crafted glyph for that
+/// word's position on the page. Result: pixel-perfect Mushaf rendering
+/// with full word-level interactivity.
 class QuranPageView extends StatefulWidget {
   final Surah surah;
   final int? currentPlayingAyahId;
@@ -44,8 +46,10 @@ class _QuranPageViewState extends State<QuranPageView> {
   void initState() {
     super.initState();
     _buildPageList();
-    // Prefetch a few pages ahead
-    MushafDataService.instance.prefetch(_surahPages.take(5).toList());
+    // Prefetch data + fonts for upcoming pages
+    final upcoming = _surahPages.take(5).toList();
+    MushafDataService.instance.prefetch(upcoming);
+    QcfFontService.instance.prefetch(upcoming);
   }
 
   void _buildPageList() {
@@ -131,9 +135,10 @@ class _QuranPageViewState extends State<QuranPageView> {
             onPageChanged: (i) {
               setState(() => _currentPageIndex = i);
               widget.onPageChanged?.call(_surahPages[i]);
-              // Prefetch next pages
+              // Prefetch next pages (data + fonts)
               final next = _surahPages.skip(i + 1).take(3).toList();
               MushafDataService.instance.prefetch(next);
+              QcfFontService.instance.prefetch(next);
               WidgetsBinding.instance
                   .addPostFrameCallback((_) => _scrollToChip());
             },
@@ -222,7 +227,7 @@ class _QuranPageViewState extends State<QuranPageView> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// _MushafPage — hybrid: Mushaf image + interactive overlay
+// _MushafPage — renders a single page using QCF v2 calligraphic fonts
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _MushafPage extends StatefulWidget {
@@ -253,140 +258,153 @@ class _MushafPageState extends State<_MushafPage>
   MushafPageData? _data;
   bool _loading = true;
   bool _error = false;
-  bool _useTextFallback = false;
-
-  // ── Image CDN ──
-  static const _imageBaseUrl =
-      'https://www.mp3quran.net/api/quran_pages_arabic';
-
-  // ── Layout constants for overlay alignment ──
-  // These ratios define where the text content sits within the Mushaf image.
-  // Tuned for mp3quran.net Madani Mushaf images.
-  static const _linesPerPage = 15;
-  static const _contentTopRatio = 0.088;
-  static const _contentBottomRatio = 0.925;
-  static const _contentLeftRatio = 0.065;
-  static const _contentRightRatio = 0.935;
-
-  // Mushaf page aspect ratio (width / height)
-  static const _pageAspectRatio = 0.637;
+  bool _fontReady = false;
 
   @override
   bool get wantKeepAlive => true;
 
-  String get _imageUrl {
-    final padded = widget.pageNumber.toString().padLeft(3, '0');
-    return '$_imageBaseUrl/$padded.png';
-  }
-
   @override
   void initState() {
     super.initState();
-    _load();
+    _loadAll();
   }
 
-  Future<void> _load() async {
-    final data = await MushafDataService.instance.getPage(widget.pageNumber);
+  Future<void> _loadAll() async {
+    // Load API data and font in parallel
+    final results = await Future.wait([
+      MushafDataService.instance.getPage(widget.pageNumber),
+      QcfFontService.instance.loadFont(widget.pageNumber),
+    ]);
+
     if (!mounted) return;
+
+    final data = results[0] as MushafPageData?;
+    final fontOk = results[1] as bool;
+
     setState(() {
       _data = data;
+      _fontReady = fontOk;
       _loading = false;
       _error = data == null;
     });
   }
 
   // ── Highlight colours ──
-  static const _lineHL = Color(0x2ABE8C3C); // warm gold, 16%
-  static const _lineHLDark = Color(0x30D4AF37); // bright gold, 19%
-  static const _verseHL = Color(0x183B82F6);
-  static const _wordHL = Color(0x403B82F6);
-  static const _wordHLDark = Color(0x503B82F6);
+  static const _verseHL = Color(0x20BE8C3C); // warm gold 12%
+  static const _wordHL = Color(0x40BE8C3C); // warm gold 25%
+  static const _wordHLDark = Color(0x50D4AF37); // bright gold 31%
+  static const _verseHLDark = Color(0x25D4AF37);
+
+  // ── Decorative border colours ──
+  static const _borderOuter = Color(0xFFB8956A);
+  static const _borderInner = Color(0xFFD4B896);
+  static const _borderOuterDark = Color(0xFF6B5A3E);
+  static const _borderInnerDark = Color(0xFF4A3F2E);
+  static const _pageBg = Color(0xFFFFFBF5);
+  static const _pageBgDark = Color(0xFF1E1A14);
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
 
     if (_loading) {
-      return const Center(
-        child: CircularProgressIndicator(strokeWidth: 2),
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(
+              width: 32,
+              height: 32,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.5,
+                color: AppColors.primary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Page ${widget.pageNumber}',
+              style: TextStyle(
+                fontSize: 13,
+                color: widget.isDark
+                    ? AppColors.textSecondary
+                    : AppColors.textSecondaryLight,
+              ),
+            ),
+          ],
+        ),
       );
     }
 
-    // If image failed previously, use text-based rendering
-    if (_useTextFallback) {
-      if (_error || _data == null) return _fallbackPage();
-      return _buildTextPage();
+    if (_error || _data == null) {
+      return _fallbackPage();
     }
 
-    return _buildHybridPage();
+    // If font failed to load, fall back to text rendering
+    if (!_fontReady) {
+      return _buildTextFallback();
+    }
+
+    return _buildQcfPage();
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // HYBRID MODE — Mushaf image + interactive overlay
+  // QCF RENDERING — calligraphic font-based Mushaf page
   // ─────────────────────────────────────────────────────────────────────────
 
-  Widget _buildHybridPage() {
-    final bgColor = widget.isDark
-        ? AppColors.surface
-        : const Color(0xFFFFFBF5);
+  Widget _buildQcfPage() {
+    final outerBorder = widget.isDark ? _borderOuterDark : _borderOuter;
+    final innerBorder = widget.isDark ? _borderInnerDark : _borderInner;
+    final bgColor = widget.isDark ? _pageBgDark : _pageBg;
 
-    return Container(
-      color: bgColor,
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-      child: Center(
-        child: AspectRatio(
-          aspectRatio: _pageAspectRatio,
-          child: Stack(
-            fit: StackFit.expand,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      child: Container(
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: outerBorder, width: 2),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: widget.isDark ? 0.3 : 0.08),
+              blurRadius: 12,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Container(
+          margin: const EdgeInsets.all(5),
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: innerBorder.withValues(alpha: 0.6),
+              width: 1,
+            ),
+            borderRadius: BorderRadius.circular(3),
+          ),
+          child: Column(
             children: [
-              // ── Layer 1: Mushaf page image ──
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: widget.isDark
-                    ? ColorFiltered(
-                        colorFilter: const ColorFilter.matrix(<double>[
-                          -0.8, 0, 0, 0, 200, // invert & soften red
-                          0, -0.75, 0, 0, 185, // invert & soften green
-                          0, 0, -0.7, 0, 170,  // invert & warm blue
-                          0, 0, 0, 1, 0,        // keep alpha
-                        ]),
-                        child: _buildImage(),
-                      )
-                    : _buildImage(),
+              // ── Content area ──
+              Expanded(
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      return _buildQcfLines(constraints);
+                    },
+                  ),
+                ),
               ),
 
-              // ── Layer 2: Interactive overlay ──
-              if (_data != null)
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: _buildInteractiveOverlay(),
-                ),
-
-              // ── Layer 3: Page number pill ──
-              Positioned(
-                bottom: 6,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: widget.isDark
-                          ? Colors.black.withValues(alpha: 0.5)
-                          : Colors.white.withValues(alpha: 0.7),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '${widget.pageNumber}',
-                      style: GoogleFonts.poppins(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: widget.isDark
-                            ? AppColors.textSecondary
-                            : const Color(0xFF8C7A5E),
-                      ),
-                    ),
+              // ── Page number ──
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(
+                  '${widget.pageNumber}',
+                  style: GoogleFonts.amiri(
+                    fontSize: 13,
+                    color: widget.isDark
+                        ? AppColors.textSecondary
+                        : const Color(0xFF8C7A5E),
                   ),
                 ),
               ),
@@ -397,127 +415,92 @@ class _MushafPageState extends State<_MushafPage>
     );
   }
 
-  Widget _buildImage() {
-    return Image.network(
-      _imageUrl,
-      fit: BoxFit.fill,
-      filterQuality: FilterQuality.high,
-      loadingBuilder: (context, child, loadingProgress) {
-        if (loadingProgress == null) return child;
-        final progress = loadingProgress.expectedTotalBytes != null
-            ? loadingProgress.cumulativeBytesLoaded /
-                loadingProgress.expectedTotalBytes!
-            : null;
-        return Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(
-                width: 36,
-                height: 36,
-                child: CircularProgressIndicator(
-                  value: progress,
-                  strokeWidth: 2.5,
-                  color: AppColors.primary,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'Page ${widget.pageNumber}',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: widget.isDark
-                      ? AppColors.textSecondary
-                      : AppColors.textSecondaryLight,
-                ),
-              ),
-            ],
+  Widget _buildQcfLines(BoxConstraints constraints) {
+    final lines = _data!.lines;
+    final maxLine = _data!.maxLine;
+    final lineHeight = constraints.maxHeight / maxLine;
+    final fontFamily = QcfFontService.instance.fontFamily(widget.pageNumber);
+
+    // Calculate font size relative to line height
+    final fontSize = lineHeight * 1.05;
+
+    return Column(
+      children: [
+        for (int ln = 1; ln <= maxLine; ln++)
+          SizedBox(
+            height: lineHeight,
+            child: _buildQcfLine(
+              lines[ln] ?? [],
+              fontFamily,
+              fontSize,
+            ),
           ),
-        );
-      },
-      errorBuilder: (_, __, ___) {
-        // Switch to text fallback on image error
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) setState(() => _useTextFallback = true);
-        });
-        return const SizedBox();
-      },
+      ],
     );
   }
 
-  /// Builds the transparent interactive overlay with line-based tap zones.
-  Widget _buildInteractiveOverlay() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final w = constraints.maxWidth;
-        final h = constraints.maxHeight;
+  Widget _buildQcfLine(
+    List<MushafWord> words,
+    String fontFamily,
+    double fontSize,
+  ) {
+    if (words.isEmpty) return const SizedBox.expand();
 
-        final contentTop = h * _contentTopRatio;
-        final contentHeight = h * (_contentBottomRatio - _contentTopRatio);
-        final contentLeft = w * _contentLeftRatio;
-        final contentWidth = w * (_contentRightRatio - _contentLeftRatio);
-        final lineHeight = contentHeight / _linesPerPage;
-
-        return Stack(
-          children: [
-            for (int ln = 1; ln <= _linesPerPage; ln++)
-              Positioned(
-                top: contentTop + (ln - 1) * lineHeight,
-                left: contentLeft,
-                width: contentWidth,
-                height: lineHeight,
-                child: _buildLineOverlay(ln),
-              ),
-          ],
-        );
-      },
+    return Row(
+      textDirection: TextDirection.rtl,
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: words.map((w) => _buildQcfWord(w, fontFamily, fontSize)).toList(),
     );
   }
 
-  /// A single line zone: transparent when idle, highlighted when active.
-  Widget _buildLineOverlay(int lineNum) {
-    final words = _data!.lines[lineNum] ?? [];
-    if (words.isEmpty) return const SizedBox.shrink();
+  Widget _buildQcfWord(MushafWord word, String fontFamily, double fontSize) {
+    final isPlayingVerse =
+        word.verseNumber == widget.currentPlayingAyahId &&
+            word.surahNumber == widget.surah.id;
+    final isActiveWord = isPlayingVerse &&
+        !word.isEnd &&
+        word.wordIndex == widget.currentWordIndex;
 
-    // Check if this line contains the currently playing verse
-    final playingWords = words.where((w) =>
-        w.verseNumber == widget.currentPlayingAyahId &&
-        w.surahNumber == widget.surah.id);
-    final isPlayingLine = playingWords.isNotEmpty;
+    Color? bg;
+    if (isActiveWord) {
+      bg = widget.isDark ? _wordHLDark : _wordHL;
+    } else if (isPlayingVerse) {
+      bg = widget.isDark ? _verseHLDark : _verseHL;
+    }
 
-    // Find the first "real" verse on this line for tap target
-    final tapVerse = words
-        .firstWhere((w) => !w.isEnd,
-            orElse: () => words.first)
-        .verseNumber;
+    final textColor = widget.isDark
+        ? const Color(0xFFE8DFD1)
+        : const Color(0xFF1C1206);
 
     return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => widget.onAyahTap?.call(tapVerse),
+      onTap: () => widget.onAyahTap?.call(word.verseNumber),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
+        duration: const Duration(milliseconds: 200),
         curve: Curves.easeOut,
+        padding: const EdgeInsets.symmetric(horizontal: 0),
         decoration: BoxDecoration(
-          color: isPlayingLine
-              ? (widget.isDark ? _lineHLDark : _lineHL)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(3),
-          border: isPlayingLine
-              ? Border.all(
-                  color: AppColors.primary.withValues(alpha: 0.3),
-                  width: 0.5,
-                )
-              : null,
+          color: bg,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(
+          word.codeV2,
+          textDirection: TextDirection.rtl,
+          style: TextStyle(
+            fontFamily: fontFamily,
+            fontSize: fontSize,
+            height: 1.0,
+            color: textColor,
+          ),
         ),
       ),
     );
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // TEXT FALLBACK — used when image fails to load
+  // TEXT FALLBACK — used when QCF font fails to load
   // ─────────────────────────────────────────────────────────────────────────
 
-  /// Fallback: simple text rendering if API fails.
   Widget _fallbackPage() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -539,34 +522,23 @@ class _MushafPageState extends State<_MushafPage>
     );
   }
 
-  /// Text-based Mushaf rendering (fallback when image CDN is unavailable).
-  Widget _buildTextPage() {
+  Widget _buildTextFallback() {
     final lines = _data!.lines;
-    final allLineNums = lines.keys.toList()..sort();
-    final maxLine = allLineNums.isEmpty ? 1 : allLineNums.last;
-    final firstLine = allLineNums.isEmpty ? 1 : allLineNums.first;
+    final sortedKeys = lines.keys.toList()..sort();
+    final maxLine = sortedKeys.isEmpty ? 1 : sortedKeys.last;
+    final firstLine = sortedKeys.isEmpty ? 1 : sortedKeys.first;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Container(
         decoration: BoxDecoration(
-          color: widget.isDark
-              ? AppColors.surface
-              : const Color(0xFFFFFBF5),
+          color: widget.isDark ? AppColors.surface : const Color(0xFFFFFBF5),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: widget.isDark
                 ? AppColors.divider.withValues(alpha: 0.3)
                 : const Color(0xFFD5C4A1).withValues(alpha: 0.6),
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black
-                  .withValues(alpha: widget.isDark ? 0.12 : 0.04),
-              blurRadius: 10,
-              offset: const Offset(0, 2),
-            ),
-          ],
         ),
         child: Column(
           children: [
@@ -586,7 +558,6 @@ class _MushafPageState extends State<_MushafPage>
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     final lineHeight = constraints.maxHeight / maxLine;
-
                     return Column(
                       children: [
                         if (widget.isFirstPage || firstLine > 1)
@@ -594,7 +565,7 @@ class _MushafPageState extends State<_MushafPage>
                         for (int ln = firstLine; ln <= maxLine; ln++)
                           SizedBox(
                             height: lineHeight,
-                            child: _buildLine(lines[ln] ?? []),
+                            child: _buildTextLine(lines[ln] ?? []),
                           ),
                       ],
                     );
@@ -683,33 +654,21 @@ class _MushafPageState extends State<_MushafPage>
     );
   }
 
-  Widget _buildLine(List<MushafWord> words) {
+  Widget _buildTextLine(List<MushafWord> words) {
     if (words.isEmpty) return const SizedBox.expand();
-
     final isPartial = words.length <= 3;
-
     return Row(
       textDirection: TextDirection.rtl,
       mainAxisAlignment:
           isPartial ? MainAxisAlignment.center : MainAxisAlignment.spaceBetween,
-      children: words.map((w) => _buildWord(w)).toList(),
+      children: words.map((w) => _buildTextWord(w)).toList(),
     );
   }
 
-  Widget _buildWord(MushafWord word) {
+  Widget _buildTextWord(MushafWord word) {
     final isPlayingVerse =
         word.verseNumber == widget.currentPlayingAyahId &&
             word.surahNumber == widget.surah.id;
-    final isActiveWord = isPlayingVerse &&
-        !word.isEnd &&
-        word.wordIndex == widget.currentWordIndex;
-
-    Color? bg;
-    if (isActiveWord) {
-      bg = widget.isDark ? _wordHLDark : _wordHL;
-    } else if (isPlayingVerse) {
-      bg = _verseHL;
-    }
 
     if (word.isEnd) {
       return GestureDetector(
@@ -749,31 +708,18 @@ class _MushafPageState extends State<_MushafPage>
     return Flexible(
       child: GestureDetector(
         onTap: () => widget.onAyahTap?.call(word.verseNumber),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          curve: Curves.easeOut,
-          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Text(
-            word.text,
-            textDirection: TextDirection.rtl,
-            maxLines: 1,
-            overflow: TextOverflow.visible,
-            style: TextStyle(
-              fontFamily: 'Scheherazade',
-              fontSize: 22,
-              height: 1.6,
-              color: isActiveWord
-                  ? (widget.isDark
-                      ? Colors.white
-                      : const Color(0xFF1A3A5C))
-                  : (widget.isDark
-                      ? AppColors.textArabic
-                      : const Color(0xFF2C1F0E)),
-            ),
+        child: Text(
+          word.text,
+          textDirection: TextDirection.rtl,
+          maxLines: 1,
+          overflow: TextOverflow.visible,
+          style: TextStyle(
+            fontFamily: 'Scheherazade',
+            fontSize: 22,
+            height: 1.6,
+            color: widget.isDark
+                ? AppColors.textArabic
+                : const Color(0xFF2C1F0E),
           ),
         ),
       ),

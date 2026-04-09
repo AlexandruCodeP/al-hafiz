@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 class MushafWord {
   final int id;
   final String text;
+  final String codeV2; // QCF v2 glyph character(s)
   final int lineNumber;
   final int position; // position within the verse (1-based)
   final int verseNumber;
@@ -15,6 +16,7 @@ class MushafWord {
   const MushafWord({
     required this.id,
     required this.text,
+    required this.codeV2,
     required this.lineNumber,
     required this.position,
     required this.verseNumber,
@@ -53,6 +55,12 @@ class MushafPageData {
     final keys = lines.keys.toList()..sort();
     return keys.isEmpty ? 1 : keys.first;
   }
+
+  /// Total number of lines on this page.
+  int get maxLine {
+    final keys = lines.keys.toList()..sort();
+    return keys.isEmpty ? 1 : keys.last;
+  }
 }
 
 /// Fetches and caches Mushaf page layout data from the Quran.com v4 API.
@@ -70,7 +78,7 @@ class MushafDataService {
       final uri = Uri.parse(
         'https://api.quran.com/api/v4/verses/by_page/$pageNumber'
         '?words=true'
-        '&word_fields=text_uthmani,line_number'
+        '&word_fields=text_uthmani,code_v2,v2_page,line_number'
         '&per_page=50',
       );
       final response = await http.get(uri).timeout(const Duration(seconds: 12));
@@ -98,10 +106,12 @@ class MushafDataService {
           final charType = word['char_type_name'] as String? ?? 'word';
           final text =
               word['text_uthmani'] as String? ?? word['text'] as String? ?? '';
+          final codeV2 = word['code_v2'] as String? ?? '';
 
           lines.putIfAbsent(lineNum, () => []).add(MushafWord(
             id: word['id'] as int? ?? 0,
             text: text,
+            codeV2: codeV2,
             lineNumber: lineNum,
             position: pos,
             verseNumber: verseNum,
