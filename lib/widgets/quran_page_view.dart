@@ -7,9 +7,9 @@ import '../theme/app_theme.dart';
 
 /// Displays a surah in authentic Mushaf page layout.
 ///
-/// Each page is fetched from the Quran.com API, rendering word-by-word
-/// in 15-line pages with justified text, decorative borders, and
-/// real-time word-level audio highlighting.
+/// Hybrid approach: loads Mushaf page images from CDN with an interactive
+/// overlay for verse tapping and audio highlighting. Falls back to
+/// text-based rendering if the image fails to load.
 class QuranPageView extends StatefulWidget {
   final Surah surah;
   final int? currentPlayingAyahId;
@@ -222,7 +222,7 @@ class _QuranPageViewState extends State<QuranPageView> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// _MushafPage — a single Mushaf page with line-based layout
+// _MushafPage — hybrid: Mushaf image + interactive overlay
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _MushafPage extends StatefulWidget {
@@ -253,9 +253,31 @@ class _MushafPageState extends State<_MushafPage>
   MushafPageData? _data;
   bool _loading = true;
   bool _error = false;
+  bool _useTextFallback = false;
+
+  // ── Image CDN ──
+  static const _imageBaseUrl =
+      'https://www.mp3quran.net/api/quran_pages_arabic';
+
+  // ── Layout constants for overlay alignment ──
+  // These ratios define where the text content sits within the Mushaf image.
+  // Tuned for mp3quran.net Madani Mushaf images.
+  static const _linesPerPage = 15;
+  static const _contentTopRatio = 0.088;
+  static const _contentBottomRatio = 0.925;
+  static const _contentLeftRatio = 0.065;
+  static const _contentRightRatio = 0.935;
+
+  // Mushaf page aspect ratio (width / height)
+  static const _pageAspectRatio = 0.637;
 
   @override
   bool get wantKeepAlive => true;
+
+  String get _imageUrl {
+    final padded = widget.pageNumber.toString().padLeft(3, '0');
+    return '$_imageBaseUrl/$padded.png';
+  }
 
   @override
   void initState() {
@@ -274,9 +296,11 @@ class _MushafPageState extends State<_MushafPage>
   }
 
   // ── Highlight colours ──
-  static const _verseHL = Color(0x183B82F6); // 10 % blue
-  static const _wordHL = Color(0x403B82F6); // 25 % blue
-  static const _wordHLDark = Color(0x503B82F6); // 31 % blue (dark mode)
+  static const _lineHL = Color(0x2ABE8C3C); // warm gold, 16%
+  static const _lineHLDark = Color(0x30D4AF37); // bright gold, 19%
+  static const _verseHL = Color(0x183B82F6);
+  static const _wordHL = Color(0x403B82F6);
+  static const _wordHLDark = Color(0x503B82F6);
 
   @override
   Widget build(BuildContext context) {
@@ -288,12 +312,210 @@ class _MushafPageState extends State<_MushafPage>
       );
     }
 
-    if (_error || _data == null) {
-      return _fallbackPage();
+    // If image failed previously, use text-based rendering
+    if (_useTextFallback) {
+      if (_error || _data == null) return _fallbackPage();
+      return _buildTextPage();
     }
 
-    return _buildMushafPage();
+    return _buildHybridPage();
   }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // HYBRID MODE — Mushaf image + interactive overlay
+  // ─────────────────────────────────────────────────────────────────────────
+
+  Widget _buildHybridPage() {
+    final bgColor = widget.isDark
+        ? AppColors.surface
+        : const Color(0xFFFFFBF5);
+
+    return Container(
+      color: bgColor,
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      child: Center(
+        child: AspectRatio(
+          aspectRatio: _pageAspectRatio,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // ── Layer 1: Mushaf page image ──
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: widget.isDark
+                    ? ColorFiltered(
+                        colorFilter: const ColorFilter.matrix(<double>[
+                          -0.8, 0, 0, 0, 200, // invert & soften red
+                          0, -0.75, 0, 0, 185, // invert & soften green
+                          0, 0, -0.7, 0, 170,  // invert & warm blue
+                          0, 0, 0, 1, 0,        // keep alpha
+                        ]),
+                        child: _buildImage(),
+                      )
+                    : _buildImage(),
+              ),
+
+              // ── Layer 2: Interactive overlay ──
+              if (_data != null)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: _buildInteractiveOverlay(),
+                ),
+
+              // ── Layer 3: Page number pill ──
+              Positioned(
+                bottom: 6,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: widget.isDark
+                          ? Colors.black.withValues(alpha: 0.5)
+                          : Colors.white.withValues(alpha: 0.7),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${widget.pageNumber}',
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: widget.isDark
+                            ? AppColors.textSecondary
+                            : const Color(0xFF8C7A5E),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImage() {
+    return Image.network(
+      _imageUrl,
+      fit: BoxFit.fill,
+      filterQuality: FilterQuality.high,
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        final progress = loadingProgress.expectedTotalBytes != null
+            ? loadingProgress.cumulativeBytesLoaded /
+                loadingProgress.expectedTotalBytes!
+            : null;
+        return Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 36,
+                height: 36,
+                child: CircularProgressIndicator(
+                  value: progress,
+                  strokeWidth: 2.5,
+                  color: AppColors.primary,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Page ${widget.pageNumber}',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: widget.isDark
+                      ? AppColors.textSecondary
+                      : AppColors.textSecondaryLight,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+      errorBuilder: (_, __, ___) {
+        // Switch to text fallback on image error
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() => _useTextFallback = true);
+        });
+        return const SizedBox();
+      },
+    );
+  }
+
+  /// Builds the transparent interactive overlay with line-based tap zones.
+  Widget _buildInteractiveOverlay() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final w = constraints.maxWidth;
+        final h = constraints.maxHeight;
+
+        final contentTop = h * _contentTopRatio;
+        final contentHeight = h * (_contentBottomRatio - _contentTopRatio);
+        final contentLeft = w * _contentLeftRatio;
+        final contentWidth = w * (_contentRightRatio - _contentLeftRatio);
+        final lineHeight = contentHeight / _linesPerPage;
+
+        return Stack(
+          children: [
+            for (int ln = 1; ln <= _linesPerPage; ln++)
+              Positioned(
+                top: contentTop + (ln - 1) * lineHeight,
+                left: contentLeft,
+                width: contentWidth,
+                height: lineHeight,
+                child: _buildLineOverlay(ln),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// A single line zone: transparent when idle, highlighted when active.
+  Widget _buildLineOverlay(int lineNum) {
+    final words = _data!.lines[lineNum] ?? [];
+    if (words.isEmpty) return const SizedBox.shrink();
+
+    // Check if this line contains the currently playing verse
+    final playingWords = words.where((w) =>
+        w.verseNumber == widget.currentPlayingAyahId &&
+        w.surahNumber == widget.surah.id);
+    final isPlayingLine = playingWords.isNotEmpty;
+
+    // Find the first "real" verse on this line for tap target
+    final tapVerse = words
+        .firstWhere((w) => !w.isEnd,
+            orElse: () => words.first)
+        .verseNumber;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => widget.onAyahTap?.call(tapVerse),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+        decoration: BoxDecoration(
+          color: isPlayingLine
+              ? (widget.isDark ? _lineHLDark : _lineHL)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(3),
+          border: isPlayingLine
+              ? Border.all(
+                  color: AppColors.primary.withValues(alpha: 0.3),
+                  width: 0.5,
+                )
+              : null,
+        ),
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // TEXT FALLBACK — used when image fails to load
+  // ─────────────────────────────────────────────────────────────────────────
 
   /// Fallback: simple text rendering if API fails.
   Widget _fallbackPage() {
@@ -317,11 +539,11 @@ class _MushafPageState extends State<_MushafPage>
     );
   }
 
-  Widget _buildMushafPage() {
+  /// Text-based Mushaf rendering (fallback when image CDN is unavailable).
+  Widget _buildTextPage() {
     final lines = _data!.lines;
     final allLineNums = lines.keys.toList()..sort();
     final maxLine = allLineNums.isEmpty ? 1 : allLineNums.last;
-    // Detect surah header lines (lines before first content line)
     final firstLine = allLineNums.isEmpty ? 1 : allLineNums.first;
 
     return Padding(
@@ -330,7 +552,7 @@ class _MushafPageState extends State<_MushafPage>
         decoration: BoxDecoration(
           color: widget.isDark
               ? AppColors.surface
-              : const Color(0xFFFFFBF5), // warm cream
+              : const Color(0xFFFFFBF5),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: widget.isDark
@@ -339,7 +561,8 @@ class _MushafPageState extends State<_MushafPage>
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: widget.isDark ? 0.12 : 0.04),
+              color: Colors.black
+                  .withValues(alpha: widget.isDark ? 0.12 : 0.04),
               blurRadius: 10,
               offset: const Offset(0, 2),
             ),
@@ -347,7 +570,6 @@ class _MushafPageState extends State<_MushafPage>
         ),
         child: Column(
           children: [
-            // ── Inner decorative border ──
             Expanded(
               child: Container(
                 margin: const EdgeInsets.all(8),
@@ -367,11 +589,8 @@ class _MushafPageState extends State<_MushafPage>
 
                     return Column(
                       children: [
-                        // Surah header (if content starts after line 1)
                         if (widget.isFirstPage || firstLine > 1)
                           _surahHeader(lineHeight, firstLine - 1),
-
-                        // ── Content lines ──
                         for (int ln = firstLine; ln <= maxLine; ln++)
                           SizedBox(
                             height: lineHeight,
@@ -383,8 +602,6 @@ class _MushafPageState extends State<_MushafPage>
                 ),
               ),
             ),
-
-            // ── Page number ──
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
               child: Text(
@@ -403,11 +620,10 @@ class _MushafPageState extends State<_MushafPage>
     );
   }
 
-  /// Decorative surah header (name + bismillah).
   Widget _surahHeader(double lineHeight, int headerLines) {
     if (headerLines <= 0) headerLines = 1;
     final surah = widget.surah;
-    final showBismillah = surah.id != 9; // no bismillah for At-Tawbah
+    final showBismillah = surah.id != 9;
 
     return SizedBox(
       height: lineHeight * headerLines,
@@ -467,11 +683,9 @@ class _MushafPageState extends State<_MushafPage>
     );
   }
 
-  /// Build a single line of Mushaf text (one Row of word widgets, RTL).
   Widget _buildLine(List<MushafWord> words) {
     if (words.isEmpty) return const SizedBox.expand();
 
-    // Short lines (≤3 items) are centered; full lines are justified
     final isPartial = words.length <= 3;
 
     return Row(
@@ -497,7 +711,6 @@ class _MushafPageState extends State<_MushafPage>
       bg = _verseHL;
     }
 
-    // Verse-end marker (number ornament)
     if (word.isEnd) {
       return GestureDetector(
         onTap: () => widget.onAyahTap?.call(word.verseNumber),
@@ -533,7 +746,6 @@ class _MushafPageState extends State<_MushafPage>
       );
     }
 
-    // Regular word
     return Flexible(
       child: GestureDetector(
         onTap: () => widget.onAyahTap?.call(word.verseNumber),
@@ -568,7 +780,6 @@ class _MushafPageState extends State<_MushafPage>
     );
   }
 
-  /// Convert an integer to Eastern Arabic numerals (٠١٢٣٤٥٦٧٨٩).
   static String _toArabicNumeral(int n) {
     const digits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
     return n.toString().split('').map((c) => digits[int.parse(c)]).join();
