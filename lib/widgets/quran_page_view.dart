@@ -446,11 +446,13 @@ class _MushafPageState extends State<_MushafPage>
   ) {
     if (words.isEmpty) return const SizedBox.expand();
 
-    return Row(
-      textDirection: TextDirection.rtl,
-      mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: words.map((w) => _buildQcfWord(w, fontFamily, fontSize)).toList(),
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Row(
+        textDirection: TextDirection.rtl,
+        mainAxisSize: MainAxisSize.min,
+        children: words.map((w) => _buildQcfWord(w, fontFamily, fontSize)).toList(),
+      ),
     );
   }
 
