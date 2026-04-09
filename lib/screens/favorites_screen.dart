@@ -69,7 +69,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
           : _favorites.isEmpty
               ? _EmptyState()
               : ListView.builder(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
                   itemCount: _grouped.length,
                   itemBuilder: (context, index) {
                     final surahId = _grouped.keys.elementAt(index);

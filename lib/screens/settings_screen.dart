@@ -25,7 +25,7 @@ class SettingsScreen extends StatelessWidget {
       ),
       body: PaperGrainOverlay(
         child: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
         children: [
           // Apparence section
           Text(

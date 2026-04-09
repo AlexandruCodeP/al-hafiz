@@ -264,7 +264,7 @@ class _SurahListScreenState extends State<SurahListScreen>
                       child: CircularProgressIndicator(
                           strokeWidth: 2.5, color: AppColors.primary))
                   : GridView.builder(
-                      padding: const EdgeInsets.fromLTRB(12, 4, 12, 20),
+                      padding: const EdgeInsets.fromLTRB(12, 4, 12, 100),
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 4,
