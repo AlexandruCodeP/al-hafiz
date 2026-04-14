@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'package:just_audio/just_audio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import '../models/reciter.dart';
 
 class AudioService extends ChangeNotifier {
@@ -276,10 +278,46 @@ class AudioService extends ChangeNotifier {
     }
   }
 
+  // ── Word-level timing cache: "recitationId:surahId:ayahId" → segments ──
+  final Map<String, List<List<int>>> _segmentCache = {};
+
+  /// Fetch word-level timing segments from Quran.com API.
+  /// Returns a list of [wordIndex0, wordIndex1, startMs, endMs] per word,
+  /// or null if unavailable.
+  Future<List<List<int>>?> _fetchSegments(int recitationId, int surahId, int ayahId) async {
+    final key = '$recitationId:$surahId:$ayahId';
+    if (_segmentCache.containsKey(key)) return _segmentCache[key];
+
+    try {
+      final url = 'https://api.quran.com/api/v4/recitations/$recitationId'
+          '/by_ayah/$surahId:$ayahId?fields=segments';
+      final response = await http.get(Uri.parse(url))
+          .timeout(const Duration(seconds: 5));
+      if (response.statusCode != 200) return null;
+
+      final json = jsonDecode(response.body);
+      final files = json['audio_files'] as List?;
+      if (files == null || files.isEmpty) return null;
+
+      final rawSegments = files[0]['segments'] as List?;
+      if (rawSegments == null || rawSegments.isEmpty) return null;
+
+      final segments = rawSegments
+          .map((s) => (s as List).map((e) => (e as num).toInt()).toList())
+          .toList();
+
+      _segmentCache[key] = segments;
+      return segments;
+    } catch (e) {
+      debugPrint('AudioService: failed to fetch segments: $e');
+      return null;
+    }
+  }
+
   /// Play only a segment of words within a verse.
   ///
-  /// Loads the ayah silently, estimates word-level timing proportionally,
-  /// sets an A-B clip for the segment, then starts playback from the clip start.
+  /// Tries to use real word-level timestamps from the Quran.com API.
+  /// Falls back to proportional estimation if unavailable.
   Future<void> playSegment({
     required int surahId,
     required int ayahId,
@@ -288,13 +326,12 @@ class AudioService extends ChangeNotifier {
     required List<String> allWords,
     int? totalVerses,
   }) async {
-    // Stop current playback and load the ayah without playing
     if (_isPlaying) await _player.pause();
 
     final loaded = await _loadAyahSilently(surahId, ayahId, totalVerses);
     if (!loaded) return;
 
-    // Wait for the duration to become available (track must buffer)
+    // Wait for the duration to become available
     Duration dur = _duration;
     if (dur == Duration.zero) {
       final d = await _player.durationStream
@@ -302,56 +339,75 @@ class AudioService extends ChangeNotifier {
           .first
           .timeout(const Duration(seconds: 8), onTimeout: () => null);
       if (d == null || d == Duration.zero) {
-        // Fallback: just play the whole ayah
         await _player.play();
         return;
       }
       dur = d;
     }
 
-    // Estimate word timings proportionally by character count.
-    // Strip diacritics (tashkeel) so only base letters count —
-    // this gives a better timing estimate for Arabic recitation.
-    final strippedWords = allWords.map((w) => _stripTashkeel(w)).toList();
-    final wordLengths = strippedWords.map((w) => w.runes.length.toDouble()).toList();
-    final totalChars = wordLengths.fold(0.0, (a, b) => a + b);
-    if (totalChars == 0) {
-      await _player.play();
-      return;
-    }
-
     final totalMs = dur.inMilliseconds.toDouble();
-    double cumulMs = 0;
-    final wordStarts = <double>[];
-    final wordEnds = <double>[];
 
-    for (int i = 0; i < wordLengths.length; i++) {
-      wordStarts.add(cumulMs);
-      cumulMs += (wordLengths[i] / totalChars) * totalMs;
-      wordEnds.add(cumulMs);
+    // ── Try real timestamps from Quran.com API ──
+    final recitationId = _currentReciter.quranComRecitationId;
+    List<List<int>>? segments;
+    if (recitationId != null) {
+      segments = await _fetchSegments(recitationId, surahId, ayahId);
     }
 
-    // Clamp indices to valid range
-    final si = startWordIndex.clamp(0, wordStarts.length - 1);
-    final ei = endWordIndex.clamp(0, wordEnds.length - 1);
+    double clipStartMs;
+    double clipEndMs;
 
-    // Small margin (150ms) before/after for smoother clipping
-    final clipStartMs = (wordStarts[si] - 150).clamp(0.0, totalMs);
-    final clipEndMs = (wordEnds[ei] + 150).clamp(0.0, totalMs);
+    if (segments != null && segments.length >= allWords.length) {
+      // API segments format: [word0idx, word1idx, startMs, endMs]
+      final si = startWordIndex.clamp(0, segments.length - 1);
+      final ei = endWordIndex.clamp(0, segments.length - 1);
+      clipStartMs = segments[si][2].toDouble();
+      clipEndMs = segments[ei][3].toDouble();
+    } else {
+      // ── Fallback: proportional estimation ──
+      clipStartMs = _estimateWordStart(startWordIndex, allWords, totalMs);
+      clipEndMs = _estimateWordEnd(endWordIndex, allWords, totalMs);
+    }
+
+    // Tiny margin (30ms) to avoid cutting off the first/last phoneme
+    clipStartMs = (clipStartMs - 30).clamp(0.0, totalMs);
+    clipEndMs = (clipEndMs + 30).clamp(0.0, totalMs);
 
     final clipStart = Duration(milliseconds: clipStartMs.round());
     final clipEnd = Duration(milliseconds: clipEndMs.round());
 
-    // Set clip, seek to start, then play
     setClip(clipStart, clipEnd);
     await _player.seek(clipStart);
     await _player.play();
   }
 
-  /// Remove Arabic tashkeel (diacritics) to get base letter count.
+  double _estimateWordStart(int wordIndex, List<String> allWords, double totalMs) {
+    final wordLengths = allWords.map((w) => _stripTashkeel(w).runes.length.toDouble()).toList();
+    final totalChars = wordLengths.fold(0.0, (a, b) => a + b);
+    if (totalChars == 0) return 0;
+
+    double cumul = 0;
+    final idx = wordIndex.clamp(0, wordLengths.length - 1);
+    for (int i = 0; i < idx; i++) {
+      cumul += wordLengths[i];
+    }
+    return (cumul / totalChars) * totalMs;
+  }
+
+  double _estimateWordEnd(int wordIndex, List<String> allWords, double totalMs) {
+    final wordLengths = allWords.map((w) => _stripTashkeel(w).runes.length.toDouble()).toList();
+    final totalChars = wordLengths.fold(0.0, (a, b) => a + b);
+    if (totalChars == 0) return totalMs;
+
+    double cumul = 0;
+    final idx = wordIndex.clamp(0, wordLengths.length - 1);
+    for (int i = 0; i <= idx; i++) {
+      cumul += wordLengths[i];
+    }
+    return (cumul / totalChars) * totalMs;
+  }
+
   static String _stripTashkeel(String text) {
-    // Unicode range for Arabic diacritics (tashkeel): 0x064B - 0x065F
-    // Also includes tatweel (0x0640) and superscript alef (0x0670)
     return text.replaceAll(RegExp(r'[\u064B-\u065F\u0640\u0670]'), '');
   }
 
