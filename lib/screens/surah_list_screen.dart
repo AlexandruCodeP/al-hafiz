@@ -7,7 +7,6 @@ import '../services/storage_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/paper_grain.dart';
 import '../widgets/tap_scale.dart';
-import 'mushaf_page_screen.dart';
 import 'reader_screen.dart';
 import 'search_screen.dart';
 
@@ -218,36 +217,15 @@ class _SurahListScreenState extends State<SurahListScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Title + Mushaf button
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Al-Hafiz',
-                        style: GoogleFonts.poppins(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w700,
-                          color: isDark
-                              ? AppColors.textPrimary
-                              : AppColors.textPrimaryLight,
-                        ),
-                      ),
-                      IconButton(
-                        icon: Icon(
-                          Icons.auto_stories_rounded,
-                          color: isDark ? AppColors.primary : AppColors.accent,
-                        ),
-                        tooltip: 'Mushaf',
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const MushafPageScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
+                  Text(
+                    'Al-Hafiz',
+                    style: GoogleFonts.poppins(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w700,
+                      color: isDark
+                          ? AppColors.textPrimary
+                          : AppColors.textPrimaryLight,
+                    ),
                   ),
                   const SizedBox(height: 16),
 

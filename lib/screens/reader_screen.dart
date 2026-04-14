@@ -13,11 +13,9 @@ import '../widgets/hifz_controls.dart';
 import '../widgets/note_dialog.dart';
 import '../widgets/focus_mode.dart';
 import '../widgets/paper_grain.dart';
-import '../widgets/quran_page_view.dart';
 import '../widgets/word_segment_selector.dart';
 import '../models/reciter.dart';
 import '../services/quran_service.dart';
-import '../services/word_timing_service.dart';
 
 class ReaderScreen extends StatefulWidget {
   final Surah surah;
@@ -35,7 +33,6 @@ class _ReaderScreenState extends State<ReaderScreen>
   bool _focusModeActive = false;
   bool _hideText = false;
   bool _autoScrollEnabled = true;
-  bool _pageMode = true;
   final ScrollController _scrollController = ScrollController();
   late AnimationController _entryAnim;
   AudioService? _audioService;
@@ -49,8 +46,6 @@ class _ReaderScreenState extends State<ReaderScreen>
   int? _selectedAyahId;
   bool _segmentHideMode = false;
 
-  // Word-level audio tracking for Mushaf view
-  Map<int, VerseTimings>? _wordTimings;
 
   @override
   void initState() {
@@ -64,7 +59,6 @@ class _ReaderScreenState extends State<ReaderScreen>
     _loadEnrichedSurah();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadWordTimings();
       _audioService = context.read<AudioService>();
       final hifz = context.read<HifzEngine>();
 
@@ -92,17 +86,6 @@ class _ReaderScreenState extends State<ReaderScreen>
         _surah = enriched;
         _isLoadingExtra = false;
       });
-    }
-  }
-
-  Future<void> _loadWordTimings() async {
-    final reciterId = context.read<AudioService>().currentReciter.id;
-    final timings = await WordTimingService.instance.fetchTimings(
-      widget.surah.id,
-      reciterId,
-    );
-    if (mounted && timings != null) {
-      setState(() => _wordTimings = timings);
     }
   }
 
@@ -166,36 +149,6 @@ class _ReaderScreenState extends State<ReaderScreen>
     Future.delayed(const Duration(milliseconds: 100), () {
       if (mounted) _scrollToAyah(audio.currentAyahId! - 1);
     });
-  }
-
-  Widget _buildPageMode(AudioService audio) {
-    final currentAyah = audio.currentSurahId == widget.surah.id
-        ? audio.currentAyahId
-        : null;
-
-    // Compute current word index from audio position + timing data
-    int? currentWordIdx;
-    if (currentAyah != null && _wordTimings != null && audio.isPlaying) {
-      final verseTiming = _wordTimings![currentAyah];
-      if (verseTiming != null && audio.duration.inMilliseconds > 0) {
-        currentWordIdx = WordTimingService.getCurrentWordIndex(
-          verseTiming,
-          audio.position,
-          audio.duration,
-        );
-      }
-    }
-
-    return QuranPageView(
-      surah: _surah,
-      currentPlayingAyahId: currentAyah,
-      currentWordIndex: currentWordIdx,
-      wordTimings: _wordTimings,
-      onAyahTap: (ayahId) {
-        audio.playAyah(widget.surah.id, ayahId, widget.surah.totalVerses);
-        context.read<StorageService>().saveLastPosition(widget.surah.id, ayahId);
-      },
-    );
   }
 
   Widget _buildVerseMode() {
@@ -289,14 +242,6 @@ class _ReaderScreenState extends State<ReaderScreen>
         ),
         actions: [
           IconButton(
-            icon: Icon(
-              _pageMode ? Icons.view_agenda_rounded : Icons.auto_stories_rounded,
-              size: 20,
-            ),
-            tooltip: _pageMode ? 'Mode verset' : 'Mode page',
-            onPressed: () => setState(() => _pageMode = !_pageMode),
-          ),
-          IconButton(
             icon: const Icon(Icons.settings_outlined, size: 20),
             onPressed: () => _showSettingsSheet(context),
           ),
@@ -341,9 +286,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                 : const SizedBox.shrink(),
           ),
           Expanded(
-            child: _pageMode
-                ? _buildPageMode(audio)
-                : _buildVerseMode(),
+            child: _buildVerseMode(),
           ),
           AudioPlayerBar(
             surahName: widget.surah.transliteration,
@@ -579,8 +522,6 @@ class _ReaderScreenState extends State<ReaderScreen>
                         onTap: () {
                           audio.setReciter(reciter);
                           context.read<StorageService>().setReciterId(reciter.id);
-                          // Reload word timings for the new reciter
-                          _loadWordTimings();
                           Navigator.pop(ctx);
                         },
                       );
