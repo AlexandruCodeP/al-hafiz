@@ -39,6 +39,10 @@ et un moteur de répétition qui fait le travail à votre place.
   indépendamment, chacun avec sa propre taille de texte.
 - **Thème clair / sombre / système**, palette chaude inspirée du papier et de l'encre dorée.
 - **Numéros de page du Mushaf** (édition Médine) associés à chaque verset.
+- **Mode Mushaf** : lecture planche par planche, à l'identique du livre imprimé, avec
+  feuilletage de droite à gauche et suivi de la récitation. Les éditions (Hafs, Warsh…)
+  se **téléchargent à la demande** et fonctionnent ensuite hors ligne — voir
+  [`docs/mushaf-packs.md`](docs/mushaf-packs.md).
 
 ### Écoute
 
@@ -137,21 +141,28 @@ lib/
 ├── models/
 │   ├── surah.dart                # Surah + Ayah (texte, traduction, phonétique, page)
 │   ├── reciter.dart              # Catalogue des récitateurs et de leurs sources audio
+│   ├── mushaf_pack.dart          # Packs téléchargeables, page/ligne/mot du Mushaf
 │   └── juz_data.dart             # Bornes des 30 juz du Mushaf de Médine
 ├── services/
 │   ├── quran_service.dart        # Chargement du texte, traductions, tafsir, recherche
 │   ├── audio_service.dart        # Lecture just_audio, segments de mots, timestamps
 │   ├── hifz_engine.dart          # Machine à états de la session de mémorisation
+│   ├── mushaf_repository.dart    # Catalogue, téléchargement et installation des packs
+│   ├── mushaf_layout_service.dart# Lecture de layout.db (mise en page imprimée)
+│   ├── qcf_font_service.dart     # Polices QCF page par page
 │   └── storage_service.dart      # Persistance SharedPreferences, export/import JSON
 ├── screens/
 │   ├── onboarding_screen.dart
 │   ├── surah_list_screen.dart
 │   ├── reader_screen.dart        # Écran principal de lecture/écoute/mémorisation
+│   ├── mushaf_screen.dart        # Feuilletage planche par planche
+│   ├── mushaf_style_screen.dart  # Choix et téléchargement des éditions
 │   ├── search_screen.dart
 │   ├── favorites_screen.dart
 │   └── settings_screen.dart
 ├── widgets/
 │   ├── ayah_card.dart            # Rendu d'un verset
+│   ├── mushaf_page_view.dart     # Rendu d'une planche du Mushaf
 │   ├── audio_player_bar.dart     # Barre de lecture persistante
 │   ├── hifz_controls.dart        # Réglages de session (répétitions, pauses, plage)
 │   ├── word_segment_selector.dart# Sélection de mots par glissement
@@ -220,6 +231,7 @@ Le texte arabe est **embarqué** ; tout le reste est facultatif et récupéré e
 | --- | --- | --- |
 | Texte arabe des 114 sourates | `assets/quran.json` | ✅ |
 | Numéros de page du Mushaf | `assets/page_map.json` | ✅ |
+| Éditions du Mushaf (polices + mise en page) | packs téléchargeables, catalogue `packs/manifest.json` | ✅ une fois installées |
 | Traduction française | API Quran.com (traduction `136`) | ❌ |
 | Translittération phonétique | API Quran.com (traduction `57`) | ❌ |
 | Tafsir | API Quran.com (`816` fr, repli `169` ar) | ❌ |

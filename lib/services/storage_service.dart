@@ -45,6 +45,7 @@ class StorageService extends ChangeNotifier {
   static const _reciterKey = 'reciter_id';
   static const _recentSurahsKey = 'recent_surahs';
   static const _onboardingCompleteKey = 'onboarding_complete';
+  static const _mushafPackKey = 'mushaf_pack_id';
 
   final SharedPreferences _prefs;
 
@@ -270,6 +271,15 @@ class StorageService extends ChangeNotifier {
   bool get onboardingComplete => _prefs.getBool(_onboardingCompleteKey) ?? false;
   Future<void> setOnboardingComplete() async {
     await _prefs.setBool(_onboardingCompleteKey, true);
+    notifyListeners();
+  }
+
+  // --- Mushaf ---
+  /// Edition du Mushaf choisie par l'utilisateur. Null tant qu'aucun pack n'a
+  /// ete telecharge.
+  String? get mushafPackId => _prefs.getString(_mushafPackKey);
+  Future<void> setMushafPackId(String id) async {
+    await _prefs.setString(_mushafPackKey, id);
     notifyListeners();
   }
 

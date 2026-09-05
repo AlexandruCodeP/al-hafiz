@@ -4,9 +4,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
+import '../services/mushaf_repository.dart';
 import '../services/storage_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/paper_grain.dart';
+import 'mushaf_style_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -73,6 +75,59 @@ class SettingsScreen extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // Mushaf section
+          Text(
+            'Mushaf',
+            style: GoogleFonts.poppins(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: isDark ? AppColors.textSecondary : AppColors.textSecondaryLight,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            color: isDark ? AppColors.surfaceLight : AppColors.surfaceLightT,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(
+                color: isDark ? AppColors.divider : AppColors.dividerLight,
+                width: 0.5,
+              ),
+            ),
+            child: Consumer<MushafRepository>(
+              builder: (context, mushaf, _) {
+                final active = mushaf.activeStatus;
+                return ListTile(
+                  leading: const Icon(Icons.auto_stories_outlined, color: AppColors.primary),
+                  title: Text(
+                    'Style d\'affichage',
+                    style: GoogleFonts.poppins(
+                      fontSize: 15,
+                      color: isDark ? AppColors.textPrimary : AppColors.textPrimaryLight,
+                    ),
+                  ),
+                  subtitle: Text(
+                    active != null
+                        ? active.pack.name
+                        : 'Telecharger une edition du Mushaf',
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: isDark ? AppColors.textSecondary : AppColors.textSecondaryLight,
+                    ),
+                  ),
+                  trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textSecondary, size: 20),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const MushafStyleScreen()),
+                  ),
+                );
+              },
             ),
           ),
 

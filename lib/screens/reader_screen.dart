@@ -16,6 +16,7 @@ import '../widgets/paper_grain.dart';
 import '../widgets/word_segment_selector.dart';
 import '../models/reciter.dart';
 import '../services/quran_service.dart';
+import 'mushaf_screen.dart';
 
 class ReaderScreen extends StatefulWidget {
   final Surah surah;
@@ -224,6 +225,20 @@ class _ReaderScreenState extends State<ReaderScreen>
     );
   }
 
+  /// Ouvre la planche du Mushaf correspondant a la position courante.
+  void _openMushaf() {
+    final audio = context.read<AudioService>();
+    final ayah = (audio.currentSurahId == _surah.id ? audio.currentAyahId : null) ??
+        widget.initialAyahId ??
+        1;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MushafScreen(initialSurah: _surah.id, initialAyah: ayah),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final audio = context.watch<AudioService>();
@@ -241,6 +256,11 @@ class _ReaderScreenState extends State<ReaderScreen>
           ],
         ),
         actions: [
+          IconButton(
+            tooltip: 'Mode Mushaf',
+            icon: const Icon(Icons.auto_stories_outlined, size: 20),
+            onPressed: _openMushaf,
+          ),
           IconButton(
             icon: const Icon(Icons.settings_outlined, size: 20),
             onPressed: () => _showSettingsSheet(context),

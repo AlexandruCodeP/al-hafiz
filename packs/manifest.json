@@ -1,0 +1,39 @@
+{
+  "_readme": "Catalogue des packs Mushaf lu par l'application. Voir docs/mushaf-packs.md. Une entree dont l'url est vide s'affiche comme « Bientot disponible » et n'est pas telechargeable. Remplissez url, bytes et sha256 avec la sortie de tool/build_mushaf_pack.py.",
+  "schema": 1,
+  "packs": [
+    {
+      "id": "madinah-1405-v1",
+      "name": "Medine (1405H)",
+      "riwaya": "hafs",
+      "version": 1,
+      "lines_per_page": 15,
+      "total_pages": 604,
+      "bytes": 0,
+      "sha256": "",
+      "url": ""
+    },
+    {
+      "id": "madinah-1421-v2",
+      "name": "Medine (1421H)",
+      "riwaya": "hafs",
+      "version": 1,
+      "lines_per_page": 15,
+      "total_pages": 604,
+      "bytes": 0,
+      "sha256": "",
+      "url": ""
+    },
+    {
+      "id": "madinah-warsh",
+      "name": "Warsh (Medine)",
+      "riwaya": "warsh",
+      "version": 1,
+      "lines_per_page": 15,
+      "total_pages": 604,
+      "bytes": 0,
+      "sha256": "",
+      "url": ""
+    }
+  ]
+}

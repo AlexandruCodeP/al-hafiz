@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'models/reciter.dart';
 import 'services/audio_service.dart';
 import 'services/hifz_engine.dart';
+import 'services/mushaf_repository.dart';
 import 'services/storage_service.dart';
 import 'screens/surah_list_screen.dart';
 import 'screens/favorites_screen.dart';
@@ -46,6 +47,12 @@ class AlHafizApp extends StatelessWidget {
           update: (_, audio, prev) => prev ?? HifzEngine(audio),
         ),
         ChangeNotifierProvider.value(value: storageService),
+        // Le scan disque et le catalogue distant se font en tache de fond :
+        // l'application demarre sans les attendre.
+        ChangeNotifierProvider(
+          create: (_) => MushafRepository()
+            ..init(preferredPackId: storageService.mushafPackId),
+        ),
       ],
       child: Consumer<StorageService>(
         builder: (context, storage, _) {
