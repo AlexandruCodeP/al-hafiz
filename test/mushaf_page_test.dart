@@ -102,6 +102,40 @@ void main() {
       expect(page.lines[2].isCentered, isFalse);
     });
 
+    test('tolere les bornes vides des exports QUL', () {
+      // Les exports QUL ecrivent '' plutot que NULL sur les lignes de titre :
+      // un cast direct en num ferait planter l'affichage de la page.
+      final page = buildMushafPage(
+        pageNumber: 1,
+        lineRows: [
+          {
+            'page_number': 1,
+            'line_number': '1',
+            'line_type': 'surah_name',
+            'is_centered': '1',
+            'first_word_id': '',
+            'last_word_id': '',
+            'surah_number': '1',
+          },
+          {
+            'page_number': 1,
+            'line_number': 2,
+            'line_type': 'ayah',
+            'is_centered': 0,
+            'first_word_id': '1',
+            'last_word_id': '1',
+            'surah_number': null,
+          },
+        ],
+        words: [word(id: 1, line: 2)],
+      );
+
+      expect(page.lines[0].isCentered, isTrue);
+      expect(page.lines[0].surahNumber, 1);
+      expect(page.lines[0].words, isEmpty);
+      expect(page.lines[1].words.map((w) => w.id), [1]);
+    });
+
     test('firstWord ignore les lignes sans mot', () {
       final page = buildMushafPage(
         pageNumber: 1,

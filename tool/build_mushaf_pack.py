@@ -149,6 +149,45 @@ def is_marker(char_type: object) -> int:
     return 1 if value in ("end", "1", "true", "ayah_marker") else 0
 
 
+def optional_int(raw: object) -> int | None:
+    """Normalise une valeur numerique facultative.
+
+    Les exports QUL utilisent la chaine vide plutot que NULL pour les bornes
+    absentes (lignes de titre de sourate, basmala). Laissee telle quelle, elle
+    finirait en TEXT dans une colonne INTEGER — SQLite l'accepte — et ferait
+    echouer le cast cote application.
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, int):
+        return raw
+    text = str(raw).strip()
+    if not text:
+        return None
+    try:
+        return int(float(text))
+    except ValueError:
+        return None
+
+
+def read_info(conn: sqlite3.Connection) -> dict[str, object]:
+    """Lit la table `info` des exports QUL, quand elle existe."""
+    try:
+        row = conn.execute(
+            "SELECT name, number_of_pages, lines_per_page, font_name FROM info"
+        ).fetchone()
+    except sqlite3.Error:
+        return {}
+    if not row:
+        return {}
+    return {
+        "name": row[0],
+        "total_pages": optional_int(row[1]),
+        "lines_per_page": optional_int(row[2]),
+        "font_name": row[3],
+    }
+
+
 def build_layout(layout_db: str, words_db: str | None, dest: str) -> tuple[int, int]:
     """Reecrit les donnees source dans notre schema. Renvoie (lignes, mots)."""
     if os.path.exists(dest):
@@ -187,16 +226,24 @@ def build_layout(layout_db: str, words_db: str | None, dest: str) -> tuple[int, 
                     int(record["line_number"]),
                     normalise_line_type(record.get("line_type")),
                     1 if record.get("is_centered") in (1, "1", True, "true") else 0,
-                    record.get("first_word_id"),
-                    record.get("last_word_id"),
-                    record.get("surah_number"),
+                    optional_int(record.get("first_word_id")),
+                    optional_int(record.get("last_word_id")),
+                    optional_int(record.get("surah_number")),
                 )
             )
         out.executemany(
             "INSERT OR REPLACE INTO pages VALUES (?,?,?,?,?,?,?)", page_rows
         )
 
-        words_table = find_table(words_src, ("words", "glyphs", "word_glyphs"))
+        try:
+            words_table = find_table(words_src, ("words", "glyphs", "word_glyphs"))
+        except BuildError as error:
+            raise BuildError(
+                "aucune table de mots trouvee. Les exports « mushaf layout » de "
+                "QUL ne contiennent que la mise en page : telechargez la "
+                "ressource de mots/glyphes correspondante (code_v2) et "
+                f"passez-la avec --words-db.\n({error})"
+            ) from error
         word_map = resolve(
             columns_of(words_src, words_table),
             WORD_ALIASES,
@@ -221,7 +268,7 @@ def build_layout(layout_db: str, words_db: str | None, dest: str) -> tuple[int, 
                     int(record["word_id"]),
                     int(record["surah"]),
                     int(record["ayah"]),
-                    int(record.get("position") or 0),
+                    optional_int(record.get("position")) or 0,
                     record.get("text"),
                     str(glyph),
                     int(record["page_number"]),
@@ -280,8 +327,10 @@ def main() -> int:
     parser.add_argument("--riwaya", default="hafs",
                         choices=["hafs", "warsh", "qalun", "other"])
     parser.add_argument("--version", type=int, default=1)
-    parser.add_argument("--lines-per-page", type=int, default=15)
-    parser.add_argument("--total-pages", type=int, default=604)
+    parser.add_argument("--lines-per-page", type=int,
+                        help="par defaut : la valeur de la table `info`, sinon 15")
+    parser.add_argument("--total-pages", type=int,
+                        help="par defaut : la valeur de la table `info`, sinon 604")
     parser.add_argument("--base-url", default="",
                         help="prefixe d'URL d'hebergement, pour le manifeste")
     parser.add_argument("--out", default="build/packs")
@@ -290,11 +339,32 @@ def main() -> int:
     os.makedirs(args.out, exist_ok=True)
     staging = tempfile.mkdtemp(prefix=f"{args.id}-")
     try:
+        # La table `info` des exports QUL donne le nombre de pages, de lignes
+        # et surtout le nom de la famille de polices attendue : de quoi
+        # verifier qu'on n'assemble pas un layout V2 avec des polices V1.
+        source = sqlite3.connect(f"file:{args.layout}?mode=ro", uri=True)
+        try:
+            info = read_info(source)
+        finally:
+            source.close()
+        if info:
+            print(f"source    : {info.get('name')} — police attendue : "
+                  f"{info.get('font_name')}")
+
+        total_pages = args.total_pages or info.get("total_pages") or 604
+        lines_per_page = args.lines_per_page or info.get("lines_per_page") or 15
+
         layout_path = os.path.join(staging, "layout.db")
         lines, words = build_layout(args.layout, args.words_db, layout_path)
         print(f"layout.db : {lines} lignes, {words} mots")
+        if words == 0:
+            raise BuildError(
+                "aucun mot importe : la base de layout ne contient que la mise "
+                "en page. Telechargez la ressource de mots/glyphes "
+                "correspondante et passez-la avec --words-db."
+            )
 
-        fonts = collect_fonts(args.fonts, args.total_pages)
+        fonts = collect_fonts(args.fonts, total_pages)
         print(f"polices   : {len(fonts)} fichiers")
 
         meta = {
@@ -302,8 +372,8 @@ def main() -> int:
             "name": args.name,
             "riwaya": args.riwaya,
             "version": args.version,
-            "lines_per_page": args.lines_per_page,
-            "total_pages": args.total_pages,
+            "lines_per_page": lines_per_page,
+            "total_pages": total_pages,
             "built_at": datetime.now(timezone.utc).isoformat(),
         }
         meta_path = os.path.join(staging, "meta.json")
@@ -323,8 +393,8 @@ def main() -> int:
             "name": args.name,
             "riwaya": args.riwaya,
             "version": args.version,
-            "lines_per_page": args.lines_per_page,
-            "total_pages": args.total_pages,
+            "lines_per_page": lines_per_page,
+            "total_pages": total_pages,
             "bytes": size,
             "sha256": sha256_of(archive),
             "url": f"{args.base_url.rstrip('/')}/{args.id}.zip"

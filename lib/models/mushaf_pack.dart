@@ -190,6 +190,23 @@ enum MushafLineType {
   basmallah,
 }
 
+/// Lit un entier venant de SQLite sans supposer son type.
+///
+/// SQLite est faiblement type et les exports amont utilisent parfois la chaine
+/// vide la ou on attend NULL (bornes de mots d'une ligne de titre). Un cast
+/// direct `as num?` ferait planter l'affichage de la page.
+int? _asInt(Object? raw) {
+  if (raw == null) return null;
+  if (raw is int) return raw;
+  if (raw is num) return raw.toInt();
+  if (raw is String) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return null;
+    return int.tryParse(trimmed) ?? double.tryParse(trimmed)?.toInt();
+  }
+  return null;
+}
+
 MushafLineType _lineTypeFromDb(String? raw) {
   switch (raw) {
     case 'surah_name':
@@ -238,17 +255,16 @@ class MushafWord {
   });
 
   factory MushafWord.fromRow(Map<String, Object?> row) {
-    final text = (row['text'] as String?) ?? '';
     return MushafWord(
-      id: (row['word_id'] as num).toInt(),
-      surah: (row['surah'] as num).toInt(),
-      ayah: (row['ayah'] as num).toInt(),
-      position: (row['position'] as num?)?.toInt() ?? 0,
-      text: text,
+      id: _asInt(row['word_id']) ?? 0,
+      surah: _asInt(row['surah']) ?? 0,
+      ayah: _asInt(row['ayah']) ?? 0,
+      position: _asInt(row['position']) ?? 0,
+      text: (row['text'] as String?) ?? '',
       glyph: (row['glyph'] as String?) ?? '',
-      pageNumber: (row['page_number'] as num).toInt(),
-      lineNumber: (row['line_number'] as num).toInt(),
-      isAyahMarker: ((row['is_ayah_marker'] as num?)?.toInt() ?? 0) == 1,
+      pageNumber: _asInt(row['page_number']) ?? 0,
+      lineNumber: _asInt(row['line_number']) ?? 0,
+      isAyahMarker: (_asInt(row['is_ayah_marker']) ?? 0) == 1,
     );
   }
 
@@ -325,10 +341,10 @@ MushafPage buildMushafPage({
 
   final lines = <MushafLine>[];
   for (final row in lineRows) {
-    final lineNumber = (row['line_number'] as num).toInt();
+    final lineNumber = _asInt(row['line_number']) ?? 0;
     final type = _lineTypeFromDb(row['line_type'] as String?);
-    final first = (row['first_word_id'] as num?)?.toInt();
-    final last = (row['last_word_id'] as num?)?.toInt();
+    final first = _asInt(row['first_word_id']);
+    final last = _asInt(row['last_word_id']);
 
     var lineWords = byLine[lineNumber] ?? const <MushafWord>[];
     // Les bornes de la table `pages` font autorite : elles decoupent les
@@ -340,8 +356,8 @@ MushafPage buildMushafPage({
     lines.add(MushafLine(
       lineNumber: lineNumber,
       type: type,
-      isCentered: ((row['is_centered'] as num?)?.toInt() ?? 0) == 1,
-      surahNumber: (row['surah_number'] as num?)?.toInt(),
+      isCentered: (_asInt(row['is_centered']) ?? 0) == 1,
+      surahNumber: _asInt(row['surah_number']),
       words: lineWords,
     ));
   }
